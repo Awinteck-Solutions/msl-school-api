@@ -1,0 +1,22 @@
+# Node modules
+node_modules/
+
+# Environment files
+.env
+
+# Logs
+logs/
+*.log
+
+# Other common exclusions
+.DS_Store
+npm-debug.log
+yarn-error.log
+
+# Build directories
+dist/
+build/
+public/
+
+# TypeScript compiled files
+*.tsbuildinfo

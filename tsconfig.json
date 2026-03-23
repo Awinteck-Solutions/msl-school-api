@@ -1,0 +1,19 @@
+{
+   "compilerOptions": {
+      "lib": [
+         "es5",
+         "es6"
+      ],
+      "target": "es2019",
+      "module": "commonjs",
+      "moduleResolution": "node",
+      "outDir": "./build",
+      "emitDecoratorMetadata": true,
+      "experimentalDecorators": true,
+      "sourceMap": true,
+      "typeRoots": ["./node_modules/@types", "./src/types"],
+      "skipLibCheck": true
+   },
+   "include": ["src/**/*.ts"], // adjust if your .ts files are elsewhere
+  "exclude": ["node_modules"]
+}

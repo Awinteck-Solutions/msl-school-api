@@ -1,0 +1,33 @@
+# Ignore node modules & npm logs
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+package-lock.json
+
+# Ignore local env files
+.env
+.env.*.local
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore logs
+logs
+*.log
+
+# Ignore test coverage
+coverage
+
+# Ignore build artifacts
+dist
+build
+
+# Ignore temporary files
+tmp
+*.tmp
+
+# Git files
+.git
+.gitignore

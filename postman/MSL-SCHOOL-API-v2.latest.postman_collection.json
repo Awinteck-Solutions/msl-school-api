@@ -1,0 +1,1728 @@
+{
+  "info": {
+    "name": "MSL School API (v2) - Latest",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "token", "value": "" },
+    { "key": "studentId", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "courseId", "value": "" },
+    { "key": "lessonId", "value": "" },
+    { "key": "s3Key", "value": "" },
+    { "key": "reference", "value": "" },
+    { "key": "quiz_id", "value": "" },
+    { "key": "quizItemId", "value": "" },
+    { "key": "quizResponseId", "value": "" },
+    { "key": "flashcardId", "value": "" },
+    { "key": "flashcardItemId", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "feedbackId", "value": "" },
+    { "key": "requestId", "value": "" },
+    { "key": "windowsCodeId", "value": "" },
+    { "key": "faqId", "value": "" },
+    { "key": "enrolmentId", "value": "" },
+    { "key": "nonUserId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Analytics",
+          "item": [
+            {
+              "name": "Dashboard",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/analytics/dashboard"
+              }
+            },
+            {
+              "name": "Students",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/analytics/students?granularity=daily&from=&to="
+              }
+            },
+            {
+              "name": "Enrollments",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/analytics/enrollments?granularity=daily&from=&to=&topLimit=10&courseStatus="
+              }
+            },
+            {
+              "name": "Conversions",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/analytics/conversions"
+              }
+            },
+            {
+              "name": "Unique Active Course Students",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/analytics/unique-active-course-students?page=1&limit=50&from=&to=&courseStatus=ACTIVE"
+              }
+            },
+            {
+              "name": "Top Courses",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/analytics/top-courses?from=&to=&topLimit=10&courseStatus="
+              }
+            },
+            {
+              "name": "Top Quizzes",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/analytics/top-quizzes?from=&to=&topLimit=10&quizStatus="
+              }
+            },
+            {
+              "name": "Top Flashcards",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/analytics/top-flashcards?from=&to=&topLimit=10&flashcardStatus="
+              }
+            },
+            {
+              "name": "Top Students",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/analytics/top-students?from=&to=&topLimit=10&metric=enrollments"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logs",
+          "item": [
+            {
+              "name": "Get Logs (filters + pagination)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/logs?page=1&limit=50&from=&to=&role=&userId=&email=&method=&endpoint=&success=&statusCode="
+              }
+            }
+          ]
+        },
+        {
+          "name": "FAQs",
+          "item": [
+            {
+              "name": "List FAQs",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/faq?page=1&limit=50&search="
+              }
+            },
+            {
+              "name": "Add FAQ",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"How do I reset my password?\",\n  \"answer\": \"Use the 'Forgot password' option on the login screen.\",\n  \"status\": \"ACTIVE\",\n  \"order\": 1\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/faq"
+              }
+            },
+            {
+              "name": "Update FAQ",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"How do I reset my password?\",\n  \"answer\": \"Tap 'Forgot password' on the login screen and follow the steps.\",\n  \"status\": \"ACTIVE\",\n  \"order\": 1\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/faq/{{faqId}}"
+              }
+            },
+            {
+              "name": "Delete FAQ",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/faq/{{faqId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payments",
+          "item": [
+            {
+              "name": "List Payments (Admin)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/payment?page=1&limit=50&from=&to=&status=&email=&courseId=&reference="
+              }
+            }
+          ]
+        },
+        {
+          "name": "Course",
+          "item": [
+            {
+              "name": "List Courses",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/course"
+              }
+            },
+            {
+              "name": "By Student ID",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/course/by-student-id/{{studentId}}"
+              }
+            },
+            {
+              "name": "By Student Email",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/course/by-student-email/test@example.com"
+              }
+            },
+            {
+              "name": "Single (adminSingleV2)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/course/single/{{courseId}}"
+              }
+            },
+            {
+              "name": "Everything",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/course/everything"
+              }
+            },
+            {
+              "name": "Everything (single)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/course/everything/{{courseId}}"
+              }
+            },
+            {
+              "name": "Create Course (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/course"
+              }
+            },
+            {
+              "name": "Update Course (PATCH /admin/course)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"{{courseId}}\",\n  \"title\": \"Updated Course Title\",\n  \"description\": \"Updated course description\",\n  \"price\": \"5000\",\n  \"status\": \"ACTIVE\"\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/course"
+              }
+            },
+            {
+              "name": "Update Thumbnail (multipart)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/course/update-thumbnail"
+              }
+            },
+            {
+              "name": "Delete Course",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/course/{{courseId}}"
+              }
+            },
+            {
+              "name": "Update Status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"id\": \"{{courseId}}\",\n  \"status\": \"ACTIVE\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/course/update-status"
+              }
+            },
+            {
+              "name": "Update Archive",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"id\": \"{{courseId}}\",\n  \"archived\": true\n}" },
+                "url": "{{baseUrl}}/v2/admin/course/update-archive"
+              }
+            },
+            {
+              "name": "Add Archived Student",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"studentId\": \"{{studentId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/course/add-archived-student"
+              }
+            },
+            {
+              "name": "Remove Archived Student",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"studentId\": \"{{studentId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/course/remove-archived-student"
+              }
+            },
+            {
+              "name": "Archived by Student",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/course/archived-by-student/{{studentId}}"
+              }
+            },
+            {
+              "name": "Add Deactivated Student",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"studentId\": \"{{studentId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/course/add-deactivated-student"
+              }
+            },
+            {
+              "name": "Remove Deactivated Student",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"studentId\": \"{{studentId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/course/remove-deactivated-student"
+              }
+            },
+            {
+              "name": "Deactivated by Student",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/course/deactivated-by-student/{{studentId}}"
+              }
+            },
+            {
+              "name": "Link Courses to Course",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"linkedCourseIds\": [\"{{courseId}}\"]\n}" },
+                "url": "{{baseUrl}}/v2/admin/course/link-courses-to-course"
+              }
+            },
+            {
+              "name": "Unlink Courses from Course",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"linkedCourseIds\": [\"{{courseId}}\"]\n}" },
+                "url": "{{baseUrl}}/v2/admin/course/unlink-courses-from-course"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Category",
+          "item": [
+            {
+              "name": "List Categories",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/category"
+              }
+            },
+            {
+              "name": "Single Category",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/category/{{categoryId}}"
+              }
+            },
+            {
+              "name": "Create Category",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Category\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/category"
+              }
+            },
+            {
+              "name": "Bulk Update Categories",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"updates\": [\n    {\n      \"id\": \"{{categoryId}}\",\n      \"name\": \"Updated Category\"\n    }\n  ]\n}" },
+                "url": "{{baseUrl}}/v2/admin/category/bulk-update"
+              }
+            },
+            {
+              "name": "Update Category",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Category\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/category/{{categoryId}}"
+              }
+            },
+            {
+              "name": "Delete Category",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/category/{{categoryId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Feedback",
+          "item": [
+            {
+              "name": "List Feedback",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/feedback"
+              }
+            },
+            {
+              "name": "Single Feedback",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/feedback/{{feedbackId}}"
+              }
+            },
+            {
+              "name": "Update Feedback Status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"id\": \"{{feedbackId}}\",\n  \"status\": \"ACTIVE\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/feedback/update-status"
+              }
+            },
+            {
+              "name": "Delete Feedback",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/feedback/{{feedbackId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request",
+          "item": [
+            {
+              "name": "List Requests",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/request"
+              }
+            },
+            {
+              "name": "Toggle Request",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"status\": \"ACTIVE\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/request/{{requestId}}/toggle"
+              }
+            },
+            {
+              "name": "Delete Request",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/request/{{requestId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quiz",
+          "item": [
+            {
+              "name": "Update Quiz Thumbnail (multipart)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/quiz/thumbnail"
+              }
+            },
+            {
+              "name": "All Quizzes",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/all"
+              }
+            },
+            {
+              "name": "Single Quiz",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/single/{{quiz_id}}"
+              }
+            },
+            {
+              "name": "Quizzes by Course",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/by-course/{{courseId}}"
+              }
+            },
+            {
+              "name": "Toggle Quiz",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/toggle/{{quiz_id}}"
+              }
+            },
+            {
+              "name": "Update Quiz Info",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"id\": \"{{quiz_id}}\",\n  \"title\": \"Updated Quiz Title\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/info"
+              }
+            },
+            {
+              "name": "Delete Quiz",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/{{quiz_id}}"
+              }
+            },
+            {
+              "name": "Add Quiz",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"title\": \"New Quiz\",\n  \"courseId\": \"{{courseId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/add"
+              }
+            },
+            {
+              "name": "Update Quiz",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"id\": \"{{quiz_id}}\",\n  \"title\": \"Updated Quiz Title\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/update"
+              }
+            },
+            {
+              "name": "Add Quiz Item",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"quizId\": \"{{quiz_id}}\",\n  \"question\": \"What is 2 + 2?\",\n  \"options\": [\"3\", \"4\", \"5\", \"6\"],\n  \"answerIndex\": 1,\n  \"points\": 1\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-item"
+              }
+            },
+            {
+              "name": "Add Quiz Item w/ Objective Images (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "objectiveImages", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-item-with-objective-image"
+              }
+            },
+            {
+              "name": "Update Quiz Item w/ Objective Images (PUT multipart)",
+              "request": {
+                "method": "PUT",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "objectiveImages", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-item-with-objective-image"
+              }
+            },
+            {
+              "name": "Update Quiz Item w/ Objective Images v2 (PUT multipart)",
+              "request": {
+                "method": "PUT",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "objectiveImages", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-item-with-objective-image/v2"
+              }
+            },
+            {
+              "name": "Update Quiz Item",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"quizId\": \"{{quiz_id}}\",\n  \"quizItemId\": \"{{quizItemId}}\",\n  \"question\": \"Updated question\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-item"
+              }
+            },
+            {
+              "name": "Update Quiz Item Thumbnail (multipart)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-item/thumbnail"
+              }
+            },
+            {
+              "name": "Delete Quiz Item",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"quizId\": \"{{quiz_id}}\",\n  \"quizItemId\": \"{{quizItemId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-item"
+              }
+            },
+            {
+              "name": "Add Course to Quiz",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"quizId\": \"{{quiz_id}}\",\n  \"courseId\": \"{{courseId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/course"
+              }
+            },
+            {
+              "name": "Course to Many Quiz",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"quizIds\": [\"{{quiz_id}}\"]\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/course-to-many-quiz"
+              }
+            },
+            {
+              "name": "Remove Course from Quiz",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"quizId\": \"{{quiz_id}}\",\n  \"courseId\": \"{{courseId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/course"
+              }
+            },
+            {
+              "name": "Add Student to Quiz",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"quizId\": \"{{quiz_id}}\",\n  \"studentId\": \"{{studentId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/student"
+              }
+            },
+            {
+              "name": "Remove Student from Quiz",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"quizId\": \"{{quiz_id}}\",\n  \"studentId\": \"{{studentId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/quiz/student"
+              }
+            },
+            {
+              "name": "Quizzes by Student",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/by-student/{{studentId}}"
+              }
+            },
+            {
+              "name": "Update Answer Notes Image (multipart)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-item-answernotes/thumbnail"
+              }
+            },
+            {
+              "name": "Delete Answer Notes Image",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-item-answernotes/thumbnail/{{quizItemId}}"
+              }
+            },
+            {
+              "name": "Quiz by Course + Student",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/by-course/{{courseId}}/student/{{studentId}}"
+              }
+            },
+            {
+              "name": "All Quiz Responses (Admin)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-response/all"
+              }
+            },
+            {
+              "name": "Delete Quiz Response",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz_response/delete/{{quizResponseId}}"
+              }
+            },
+            {
+              "name": "Leaderboard (all quizzes)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-response/leaderboard"
+              }
+            },
+            {
+              "name": "Delete Quiz Leaderboard by Quiz ID",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/quiz/quiz-response/leaderboard/{{quiz_id}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Flashcards",
+          "item": [
+            {
+              "name": "List Flashcards (Admin)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/flashcard"
+              }
+            },
+            {
+              "name": "By Course (old)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/flashcard/by-course/{{courseId}}/old"
+              }
+            },
+            {
+              "name": "Create Flashcard (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/flashcard/create"
+              }
+            },
+            {
+              "name": "Update Flashcard Thumbnail (multipart)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/flashcard/thumbnail"
+              }
+            },
+            {
+              "name": "Add Flashcard Item (multipart fields)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    { "key": "termImage", "type": "file", "src": "" },
+                    { "key": "definitionImage", "type": "file", "src": "" }
+                  ]
+                },
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}/add-item"
+              }
+            },
+            {
+              "name": "Add Flashcard Items (bulk)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}/add-items"
+              }
+            },
+            {
+              "name": "Upload Flashcard Item Image (multipart)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/flashcard/item/upload-image"
+              }
+            },
+            {
+              "name": "Update Flashcard",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}/update"
+              }
+            },
+            {
+              "name": "Delete Flashcard",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}/delete"
+              }
+            },
+            {
+              "name": "Update Flashcard Item",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}/update-item"
+              }
+            },
+            {
+              "name": "Delete Flashcard Item",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}"
+              }
+            },
+            {
+              "name": "Link Flashcard",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}/link"
+              }
+            },
+            {
+              "name": "Unlink Flashcard",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}/unlink"
+              }
+            },
+            {
+              "name": "Leaderboard Complete (Admin)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}/leaderboard/complete"
+              }
+            },
+            {
+              "name": "Leaderboard Reset (Admin)",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/flashcard/{{flashcardId}}/leaderboard/reset"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lesson",
+          "item": [
+            {
+              "name": "Upload (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/lesson/upload"
+              }
+            },
+            {
+              "name": "Add PDF (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/lesson/add-pdf"
+              }
+            },
+            {
+              "name": "Add Video (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/lesson/add-video"
+              }
+            },
+            {
+              "name": "Add Video Compress (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/lesson/add-video-compress"
+              }
+            },
+            {
+              "name": "Add Video Extra (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/lesson/add-video-extra"
+              }
+            },
+            {
+              "name": "Add PDF Extra (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/lesson/add-pdf-extra"
+              }
+            },
+            {
+              "name": "Add Lesson",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/lesson/add"
+              }
+            },
+            {
+              "name": "Add Lesson (legacy: /add-lesson)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/lesson/add-lesson"
+              }
+            },
+            {
+              "name": "Link to Course",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/lesson/link-to-course"
+              }
+            },
+            {
+              "name": "Unlink from Course",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/lesson/unlink-from-course"
+              }
+            },
+            {
+              "name": "Public Lessons",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/lesson/public-lessons"
+              }
+            },
+            {
+              "name": "Bulk Update",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/lesson/bulk/update"
+              }
+            },
+            {
+              "name": "Add Resource (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/lesson/add-resource"
+              }
+            },
+            {
+              "name": "Delete Resource",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/lesson/resource/{{lessonId}}"
+              }
+            },
+            {
+              "name": "Delete PDF",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/lesson/delete-pdf"
+              }
+            },
+            {
+              "name": "Delete Video",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/lesson/delete-video"
+              }
+            },
+            {
+              "name": "Delete Video Compressed",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/lesson/delete-video-compressed"
+              }
+            },
+            {
+              "name": "Update Lesson",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/lesson/update"
+              }
+            },
+            {
+              "name": "Delete Lesson",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/lesson/{{lessonId}}"
+              }
+            },
+            {
+              "name": "Single Lesson",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/lesson/{{lessonId}}"
+              }
+            },
+            {
+              "name": "Upload Video to Bucket (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/lesson/upload-video"
+              }
+            },
+            {
+              "name": "Upload File to Bucket (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/lesson/upload-file"
+              }
+            },
+            {
+              "name": "S3 Resource",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/lesson/s3/resource?s3Key={{s3Key}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "User",
+          "item": [
+            {
+              "name": "All Users",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/user/all"
+              }
+            },
+            {
+              "name": "Single User",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/user/single/{{userId}}"
+              }
+            },
+            {
+              "name": "Update User Status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/user/update-status/{{userId}}"
+              }
+            },
+            {
+              "name": "List Non-users",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/user/non-users"
+              }
+            },
+            {
+              "name": "Non-user Auth",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/user/auth"
+              }
+            },
+            {
+              "name": "Single Non-user",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/user/non-users/{{nonUserId}}"
+              }
+            },
+            {
+              "name": "Create Non-user",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/user/non-users"
+              }
+            },
+            {
+              "name": "Update Non-user",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/user/non-users"
+              }
+            },
+            {
+              "name": "Delete Non-user",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/user/non-users/{{nonUserId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Enrolment",
+          "item": [
+            {
+              "name": "Add Enrolment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/enrolment"
+              }
+            },
+            {
+              "name": "Delete Enrolment",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/enrolment/{{enrolmentId}}"
+              }
+            },
+            {
+              "name": "Delete Many",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/enrolment/delete-many"
+              }
+            },
+            {
+              "name": "Deactivate One",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/enrolment/deactivate-one"
+              }
+            },
+            {
+              "name": "Deactivate Many",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/enrolment/deactivate-many"
+              }
+            },
+            {
+              "name": "Update Enrolment",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/enrolment"
+              }
+            },
+            {
+              "name": "Add Many",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/enrolment/add-many"
+              }
+            },
+            {
+              "name": "Add CSV (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/admin/enrolment/add-csv"
+              }
+            },
+            {
+              "name": "By Course",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/enrolment/by-course/{{courseId}}"
+              }
+            },
+            {
+              "name": "By User (email)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/enrolment/by-user/test@example.com"
+              }
+            },
+            {
+              "name": "Enroll user to many courses",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/enrolment/enroll-user-to-many-courses"
+              }
+            },
+            {
+              "name": "Unenroll user from many courses",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{}" },
+                "url": "{{baseUrl}}/v2/admin/enrolment/unenroll-user-from-many-courses"
+              }
+            }
+          ]
+        },
+        {
+          "name": "MSL AI",
+          "item": [
+            {
+              "name": "List PDFs",
+              "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/list-pdfs" }
+            },
+            {
+              "name": "Process PDFs",
+              "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/process-pdfs" }
+            },
+            {
+              "name": "Process New PDFs",
+              "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/process-new-pdfs" }
+            },
+            {
+              "name": "Upload PDF (multipart)",
+              "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "pdf", "type": "file", "src": "" }] }, "url": "{{baseUrl}}/v2/admin/msl-ai/upload-pdf" }
+            },
+            {
+              "name": "Upload PDFs (multipart)",
+              "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "pdfs", "type": "file", "src": "" }] }, "url": "{{baseUrl}}/v2/admin/msl-ai/upload-pdfs" }
+            },
+            {
+              "name": "Delete PDF (old)",
+              "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/delete-pdf/old" }
+            },
+            {
+              "name": "Query",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"question\": \"Search across the uploaded PDFs for this concept.\",\n  \"courseId\": \"{{courseId}}\"\n}" },
+                "url": "{{baseUrl}}/v2/admin/msl-ai/query"
+              }
+            },
+            {
+              "name": "Collection Info",
+              "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/collection-info" }
+            },
+            {
+              "name": "Test Qdrant",
+              "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/test-qdrant" }
+            },
+            {
+              "name": "Get Global Limits",
+              "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/global-limits" }
+            },
+            {
+              "name": "Update Global Limits",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"limits\": {\n    \"ai_query\": {\n      \"perMinute\": 5,\n      \"perDay\": 50\n    }\n  }\n}" },
+                "url": "{{baseUrl}}/v2/admin/msl-ai/global-limits"
+              }
+            },
+            {
+              "name": "Update Student Limits",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": { "mode": "raw", "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"limits\": {\n    \"ai_query\": {\n      \"perMinute\": 5,\n      \"perDay\": 20\n    }\n  }\n}" },
+                "url": "{{baseUrl}}/v2/admin/msl-ai/student-limits"
+              }
+            },
+            {
+              "name": "All Students Usage",
+              "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/all-students-usage" }
+            },
+            {
+              "name": "Student Usage",
+              "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/student-usage/{{studentId}}" }
+            },
+            {
+              "name": "AI History",
+              "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/msl-ai/ai/history" }
+            }
+          ]
+        },
+        {
+          "name": "Gemini AI",
+          "item": [
+            { "name": "List PDFs", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/list-pdfs" } },
+            { "name": "List Videos", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/list-videos" } },
+            { "name": "Process from URL", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"url\": \"https://example.com/my-lesson.pdf\",\n  \"courseId\": \"{{courseId}}\"\n}" }, "url": "{{baseUrl}}/v2/admin/gemini-ai/process-from-url" } },
+            { "name": "Process Course Lessons for Embedding", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\"\n}" }, "url": "{{baseUrl}}/v2/admin/gemini-ai/process-course-lessons-for-embedding" } },
+            { "name": "Course Lessons Processing Status", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/course-lessons-processing-status" } },
+            { "name": "Processed Lessons", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/processed-lessons" } },
+            { "name": "Upload PDF (multipart)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "pdf", "type": "file", "src": "" }] }, "url": "{{baseUrl}}/v2/admin/gemini-ai/upload-pdf" } },
+            { "name": "Upload PDFs (multipart)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "pdfs", "type": "file", "src": "" }] }, "url": "{{baseUrl}}/v2/admin/gemini-ai/upload-pdfs" } },
+            { "name": "Query (admin)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Summarize the key points in the uploaded course materials.\",\n  \"courseId\": \"{{courseId}}\"\n}" }, "url": "{{baseUrl}}/v2/admin/gemini-ai/query" } },
+            { "name": "Collection Info", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/collection-info" } },
+            { "name": "Test Qdrant", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/test-qdrant" } },
+            { "name": "Get Global Limits", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/global-limits" } },
+            { "name": "Update Global Limits", "request": { "method": "PUT", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"limits\": {\n    \"ai_query\": {\n      \"perMinute\": 5,\n      \"perDay\": 50\n    }\n  }\n}" }, "url": "{{baseUrl}}/v2/admin/gemini-ai/global-limits" } },
+            { "name": "Update Student Limits", "request": { "method": "PUT", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"limits\": {\n    \"ai_query\": {\n      \"perMinute\": 5,\n      \"perDay\": 20\n    }\n  }\n}" }, "url": "{{baseUrl}}/v2/admin/gemini-ai/student-limits" } },
+            { "name": "All Students Usage", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/all-students-usage" } },
+            { "name": "Student Usage", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/student-usage/{{studentId}}" } },
+            { "name": "AI History", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/admin/gemini-ai/ai/history" } }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "App",
+      "item": [
+        {
+          "name": "User",
+          "item": [
+            { "name": "Social Auth", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"provider\": \"google\",\n  \"idToken\": \"<google-id-token>\",\n  \"deviceId\": \"device-123\"\n}" }, "url": "{{baseUrl}}/v2/user/auth" } },
+            { "name": "Verify Device", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"deviceId\": \"device-123\",\n  \"deviceName\": \"Sam's Laptop\",\n  \"platform\": \"windows\"\n}" }, "url": "{{baseUrl}}/v2/user/verify/device" } },
+            { "name": "Upload Image (multipart)", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "upload", "type": "file", "src": "" }] }, "url": "{{baseUrl}}/v2/user/upload_image" } },
+            { "name": "Get Profile", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/user/profile" } },
+            { "name": "Update Profile", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"firstname\": \"Sam\",\n  \"lastname\": \"Jay\",\n  \"phone\": \"+2348000000000\"\n}" }, "url": "{{baseUrl}}/v2/user/profile" } },
+            { "name": "Delete Account (GET)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/user/delete" } }
+          ]
+        },
+        {
+          "name": "Course",
+          "item": [
+            { "name": "User Courses", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/course/user-courses" } },
+            { "name": "User Courses with Quizzes", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/course/user-with-quizzes" } },
+            { "name": "All Courses", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/course" } },
+            { "name": "Single Course", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/course/{{courseId}}" } }
+          ]
+        },
+        {
+          "name": "Category",
+          "item": [
+            { "name": "All Categories", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/category" } }
+          ]
+        },
+        {
+          "name": "Feedback",
+          "item": [
+            { "name": "Create Feedback", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"message\": \"Great experience so far.\",\n  \"rating\": 5\n}" }, "url": "{{baseUrl}}/v2/feedback" } }
+          ]
+        },
+        {
+          "name": "Request",
+          "item": [
+            { "name": "Add Request", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"test@example.com\",\n  \"courseId\": \"{{courseId}}\"\n}" }, "url": "{{baseUrl}}/v2/request/add" } }
+          ]
+        },
+        {
+          "name": "Windows",
+          "item": [
+            { "name": "Generate Code", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"device_id\": \"win-123\",\n  \"device_name\": \"Sam's Laptop\",\n  \"device_meta\": {\n    \"os\": \"Windows\",\n    \"app\": \"MSL School\"\n  }\n}" }, "url": "{{baseUrl}}/v2/windows/generate-code" } },
+            { "name": "Validate Code", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"123456\"\n}" }, "url": "{{baseUrl}}/v2/windows/validate-code" } },
+            { "name": "List Codes", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/windows/list-codes" } },
+            { "name": "Login with Code (public)", "request": { "method": "GET", "url": "{{baseUrl}}/v2/windows/login-with-code/{{windowsCodeId}}" } }
+          ]
+        },
+        {
+          "name": "Gamification",
+          "item": [
+            { "name": "My Gamification", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/gamification/me" } },
+            { "name": "Leaderboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/gamification/leaderboard?type=xp&limit=10" } }
+          ]
+        },
+        {
+          "name": "Lesson",
+          "item": [
+            { "name": "Complete Lesson", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/lesson/complete/{{lessonId}}" } }
+          ]
+        },
+        {
+          "name": "Quiz",
+          "item": [
+            { "name": "List Quizzes", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/quiz" } },
+            { "name": "By Student", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/quiz/by-student" } },
+            { "name": "Quiz Responses - Add", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"student\": \"{{studentId}}\",\n  \"quiz_id\": \"{{quiz_id}}\",\n  \"quiz\": [],\n  \"total_questions\": 10,\n  \"total_response\": 10,\n  \"total_corrects\": 8,\n  \"total_wrongs\": 2,\n  \"total_points\": 8\n}" }, "url": "{{baseUrl}}/v2/quiz/quiz-response/add" } },
+            { "name": "Quiz Responses - Update", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": \"{{quizResponseId}}\"\n}" }, "url": "{{baseUrl}}/v2/quiz/quiz-response/update" } },
+            { "name": "Quiz Response Leaderboard (by quiz)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/quiz/quiz-response/leaderboard/{{quiz_id}}" } },
+            { "name": "Quiz Responses by Quiz ID", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/quiz/quiz-response/by-quiz-id/{{quiz_id}}" } },
+            { "name": "By Course (student)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/quiz/by-course/{{courseId}}/student" } },
+            { "name": "Single Quiz", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/quiz/{{quiz_id}}" } }
+          ]
+        },
+        {
+          "name": "Flashcards",
+          "item": [
+            { "name": "User with Flashcards", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/flashcard/user-with-flashcards" } },
+            { "name": "By Course (student)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/flashcard/by-course/{{courseId}}/student" } },
+            { "name": "By Student", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/flashcard/by-student" } },
+            { "name": "Single Flashcard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/flashcard/{{flashcardId}}" } },
+            { "name": "Complete Flashcard", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/flashcard/{{flashcardId}}/complete" } },
+            { "name": "Progress Flashcard", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/flashcard/{{flashcardId}}/progress" } },
+            { "name": "Flashcard Leaderboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/flashcard/{{flashcardId}}/leaderboard" } }
+          ]
+        },
+        {
+          "name": "MSL AI",
+          "item": [
+            { "name": "Query General", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Explain the key ideas in this lesson.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}" }, "url": "{{baseUrl}}/v2/msl-ai/query-general" } },
+            { "name": "Query General (stream)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Explain the key ideas in this lesson.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}" }, "url": "{{baseUrl}}/v2/msl-ai/query-general-stream" } }
+          ]
+        },
+        {
+          "name": "Gemini AI",
+          "item": [
+            { "name": "Query General", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Explain this concept with examples.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/query-general" } },
+            { "name": "Query General (stream)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Explain this concept with examples.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/query-general-stream" } },
+            { "name": "Query General (context)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Continue from our last message.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/query-general-context" } },
+            { "name": "Query General (context stream)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Continue from our last message.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/query-general-context-stream" } },
+            { "name": "Query General (context audio stream)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Explain and read it out loud.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"voice\": \"female\"\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/query-general-context-audio-stream" } },
+            { "name": "Query General (context audio binary)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Explain and return audio bytes.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"voice\": \"female\"\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/query-general-context-audio-binary" } },
+            { "name": "Query General (context audio dual stream)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Stream text and audio together.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"voice\": \"female\"\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/query-general-context-audio-dual-stream" } },
+            { "name": "Query General (context audio text stream)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Stream text first, generate audio in background.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"voice\": \"female\"\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/query-general-context-audio-text-stream" } },
+            { "name": "Query General (text stream final audio)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Stream text and include final audio.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"voice\": \"female\"\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/query-general-context-text-stream-final-audio" } },
+            {
+              "name": "Query Image (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "image", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/gemini-ai/query-image"
+              }
+            },
+            {
+              "name": "Voice to Text (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "audio", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/gemini-ai/voice-to-text"
+              }
+            },
+            {
+              "name": "Voice to Text (stream) (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": { "mode": "formdata", "formdata": [{ "key": "audio", "type": "file", "src": "" }] },
+                "url": "{{baseUrl}}/v2/gemini-ai/voice-to-text-stream"
+              }
+            },
+            {
+              "name": "Voice to Text (raw)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/gemini-ai/voice-to-text-raw"
+              }
+            },
+            {
+              "name": "Voice to Text (raw stream)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/gemini-ai/voice-to-text-raw-stream"
+              }
+            },
+            { "name": "Summarize", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/summarize" } },
+            { "name": "Generate Flashcards", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"count\": 10,\n  \"persist\": false\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/generate-flashcards" } },
+            { "name": "Generate Quiz", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"numQuestions\": 5,\n  \"persist\": false\n}" }, "url": "{{baseUrl}}/v2/gemini-ai/generate-quiz" } },
+            { "name": "History", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/gemini-ai/history" } },
+            { "name": "Summaries", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/gemini-ai/summaries" } },
+            { "name": "Flashcards", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/gemini-ai/flashcards" } },
+            { "name": "Quizzes", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/gemini-ai/quizzes" } }
+          ]
+        },
+        {
+          "name": "Payments",
+          "item": [
+            { "name": "Initiate Payment", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{courseId}}\"\n}" }, "url": "{{baseUrl}}/v2/payment/initiate" } },
+            { "name": "Verify Payment", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/payment/verify/{{reference}}" } },
+            { "name": "Payment Callback View", "request": { "method": "GET", "url": "{{baseUrl}}/v2/payment/callback?reference={{reference}}" } },
+            { "name": "My Payments", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/v2/payment/my" } },
+            { "name": "Paystack Webhook", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"event\": \"charge.success\",\n  \"data\": {\n    \"reference\": \"{{reference}}\",\n    \"amount\": 500000,\n    \"currency\": \"NGN\",\n    \"customer\": {\n      \"email\": \"test@example.com\"\n    }\n  }\n}" }, "url": "{{baseUrl}}/v2/payment/webhook" } }
+          ]
+        },
+        {
+          "name": "System",
+          "item": [
+            { "name": "All System Settings", "request": { "method": "GET", "url": "{{baseUrl}}/v2/system" } },
+            { "name": "Update Available", "request": { "method": "GET", "url": "{{baseUrl}}/v2/system/update-available" } },
+            { "name": "Add", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"key\": \"mobile_min_version\",\n  \"value\": \"2.3.0\"\n}" }, "url": "{{baseUrl}}/v2/system/add" } },
+            { "name": "Update", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"key\": \"mobile_min_version\",\n  \"value\": \"2.4.0\"\n}" }, "url": "{{baseUrl}}/v2/system/update" } }
+          ]
+        }
+      ]
+    }
+  ]
+}

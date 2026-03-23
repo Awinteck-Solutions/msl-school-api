@@ -1,0 +1,8 @@
+export enum CacheTtl {
+  TWO_MINUTES = 120,
+  FIVE_MINUTES = 300,
+  TEN_MINUTES = 600,
+  TWENTY_MINUTES = 1200,
+  THIRTY_MINUTES = 1800,
+  ONE_HOUR = 3600,
+}
