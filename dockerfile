@@ -28,7 +28,7 @@ RUN apk add --no-cache ffmpeg
 COPY --from=builder /app /app
 
 # Expose port
-EXPOSE 4001
+EXPOSE 8081
 
 # Start the app
 CMD ["npm", "start"]

@@ -4,9 +4,7 @@ node_modules/
 # Environment files
 .env
 
-# Logs
-logs/
-*.log
+ 
 
 # Other common exclusions
 .DS_Store
