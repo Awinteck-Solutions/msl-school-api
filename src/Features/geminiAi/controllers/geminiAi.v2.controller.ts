@@ -1556,31 +1556,42 @@ export class GeminiAiV2Controller {
 
       res.end();
 
-      const estimatedPromptTokens = estimateTokens(prompt);
-      const estimatedCompletionTokens = estimateTokens(fullAnswer);
-      const estimatedTotalTokens =
-        estimatedPromptTokens + estimatedCompletionTokens;
+      try {
+        const estimatedPromptTokens = estimateTokens(prompt);
+        const estimatedCompletionTokens = estimateTokens(fullAnswer);
+        const estimatedTotalTokens =
+          estimatedPromptTokens + estimatedCompletionTokens;
 
-      const aiUsage = new AiUsage({
-        student: studentId,
-        course: courseId || undefined,
-        lesson: lessonId || undefined,
-        s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        queryType: "chat",
-        question,
-        answer: fullAnswer,
-        prompt_tokens: estimatedPromptTokens,
-        completion_tokens: estimatedCompletionTokens,
-        total_tokens: estimatedTotalTokens,
-        model: GEMINI_CHAT_MODEL,
-        cost_estimate_usd: 0,
-      });
-      await aiUsage.save();
-      recordStudentActivity(studentId, "ai_query", {
-        courseId: courseId || undefined,
-        lessonId: lessonId || undefined,
-      }).catch(() => {});
+        const aiUsage = new AiUsage({
+          student: studentId,
+          course: courseId || undefined,
+          lesson: lessonId || undefined,
+          s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
+          queryType: "chat",
+          question,
+          answer: fullAnswer,
+          prompt_tokens: estimatedPromptTokens,
+          completion_tokens: estimatedCompletionTokens,
+          total_tokens: estimatedTotalTokens,
+          model: GEMINI_CHAT_MODEL,
+          cost_estimate_usd: 0,
+        });
+        await aiUsage.save();
+        recordStudentActivity(studentId, "ai_query", {
+          courseId: courseId || undefined,
+          lessonId: lessonId || undefined,
+        }).catch(() => {});
+      } catch (persistError) {
+        console.error(
+          "[gemini-ai] failed to persist usage after stream end",
+          persistError
+        );
+      }
     } catch (error: any) {
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
       return res.status(500).json({
         success: false,
         message: "System error during Gemini AI general query.",
@@ -1710,35 +1721,42 @@ export class GeminiAiV2Controller {
       }
 
       res.end();
-      const estimatedPromptTokens = estimateTokens(prompt);
-      const estimatedCompletionTokens = estimateTokens(fullAnswer);
-      const estimatedTotalTokens =
-        estimatedPromptTokens + estimatedCompletionTokens;
+      try {
+        const estimatedPromptTokens = estimateTokens(prompt);
+        const estimatedCompletionTokens = estimateTokens(fullAnswer);
+        const estimatedTotalTokens =
+          estimatedPromptTokens + estimatedCompletionTokens;
 
-      const promptTokens = estimatedPromptTokens;
-      const completionTokens = estimatedCompletionTokens;
-      const totalTokens = estimatedTotalTokens;
+        const promptTokens = estimatedPromptTokens;
+        const completionTokens = estimatedCompletionTokens;
+        const totalTokens = estimatedTotalTokens;
 
-      const aiUsage = new AiUsage({
-        student: id,
-        course: courseId || undefined,
-        lesson: lessonId || undefined,
-        s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        queryType: "chat",
-        question,
-        answer: fullAnswer,
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        total_tokens: totalTokens,
-        model: GEMINI_CHAT_MODEL,
-        cost_estimate_usd: 0,
-      });
-      await aiUsage.save();
+        const aiUsage = new AiUsage({
+          student: id,
+          course: courseId || undefined,
+          lesson: lessonId || undefined,
+          s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
+          queryType: "chat",
+          question,
+          answer: fullAnswer,
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+          model: GEMINI_CHAT_MODEL,
+          cost_estimate_usd: 0,
+        });
+        await aiUsage.save();
 
-      recordStudentActivity(id, "ai_query", {
-        courseId: courseId || undefined,
-        lessonId: lessonId || undefined,
-      }).catch(() => {});
+        recordStudentActivity(id, "ai_query", {
+          courseId: courseId || undefined,
+          lessonId: lessonId || undefined,
+        }).catch(() => {});
+      } catch (persistError) {
+        console.error(
+          "[gemini-ai] failed to persist usage after stream end",
+          persistError
+        );
+      }
 
       // return res.status(200).json({
       //   success: true,
@@ -1777,6 +1795,10 @@ export class GeminiAiV2Controller {
       // });
     } catch (error: any) {
       console.log(error);
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
       return res.status(500).json({
         success: false,
         message: "System error during Gemini AI general query.",
@@ -2149,32 +2171,43 @@ export class GeminiAiV2Controller {
       res.write(`\r\n--${boundary}--\r\n`);
       res.end();
 
-      const estimatedPromptTokens = estimateTokens(prompt);
-      const estimatedCompletionTokens = estimateTokens(fullAnswer);
-      const estimatedTotalTokens =
-        estimatedPromptTokens + estimatedCompletionTokens;
+      try {
+        const estimatedPromptTokens = estimateTokens(prompt);
+        const estimatedCompletionTokens = estimateTokens(fullAnswer);
+        const estimatedTotalTokens =
+          estimatedPromptTokens + estimatedCompletionTokens;
 
-      const aiUsage = new AiUsage({
-        student: id,
-        course: courseId || undefined,
-        lesson: lessonId || undefined,
-        s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        queryType: "chat",
-        question,
-        answer: fullAnswer,
-        prompt_tokens: estimatedPromptTokens,
-        completion_tokens: estimatedCompletionTokens,
-        total_tokens: estimatedTotalTokens,
-        model: GEMINI_CHAT_MODEL,
-        cost_estimate_usd: 0,
-      });
-      await aiUsage.save();
+        const aiUsage = new AiUsage({
+          student: id,
+          course: courseId || undefined,
+          lesson: lessonId || undefined,
+          s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
+          queryType: "chat",
+          question,
+          answer: fullAnswer,
+          prompt_tokens: estimatedPromptTokens,
+          completion_tokens: estimatedCompletionTokens,
+          total_tokens: estimatedTotalTokens,
+          model: GEMINI_CHAT_MODEL,
+          cost_estimate_usd: 0,
+        });
+        await aiUsage.save();
 
-      recordStudentActivity(id, "ai_query", {
-        courseId: courseId || undefined,
-        lessonId: lessonId || undefined,
-      }).catch(() => {});
+        recordStudentActivity(id, "ai_query", {
+          courseId: courseId || undefined,
+          lessonId: lessonId || undefined,
+        }).catch(() => {});
+      } catch (persistError) {
+        console.error(
+          "[gemini-ai] failed to persist usage after multipart end",
+          persistError
+        );
+      }
     } catch (error: any) {
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
       return res.status(500).json({
         success: false,
         message: "System error during Gemini AI audio query.",
@@ -2448,36 +2481,45 @@ export class GeminiAiV2Controller {
 
       // End SSE after socket closes.
       liveSocket.on("close", async () => {
-        if (fullAnswer) {
-          const estimatedPromptTokens = estimateTokens(prompt);
-          const estimatedCompletionTokens = estimateTokens(fullAnswer);
-          const estimatedTotalTokens =
-            estimatedPromptTokens + estimatedCompletionTokens;
+        try {
+          if (fullAnswer) {
+            const estimatedPromptTokens = estimateTokens(prompt);
+            const estimatedCompletionTokens = estimateTokens(fullAnswer);
+            const estimatedTotalTokens =
+              estimatedPromptTokens + estimatedCompletionTokens;
 
-          const aiUsage = new AiUsage({
-            student: id,
-            course: courseId || undefined,
-            lesson: lessonId || undefined,
-            s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-            queryType: "chat",
-            question,
-            answer: fullAnswer,
-            prompt_tokens: estimatedPromptTokens,
-            completion_tokens: estimatedCompletionTokens,
-            total_tokens: estimatedTotalTokens,
-            model: GEMINI_CHAT_MODEL,
-            cost_estimate_usd: 0,
-          });
-          await aiUsage.save();
+            const aiUsage = new AiUsage({
+              student: id,
+              course: courseId || undefined,
+              lesson: lessonId || undefined,
+              s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
+              queryType: "chat",
+              question,
+              answer: fullAnswer,
+              prompt_tokens: estimatedPromptTokens,
+              completion_tokens: estimatedCompletionTokens,
+              total_tokens: estimatedTotalTokens,
+              model: GEMINI_CHAT_MODEL,
+              cost_estimate_usd: 0,
+            });
+            await aiUsage.save();
+          }
+
+          recordStudentActivity(id, "ai_query", {
+            courseId: courseId || undefined,
+            lessonId: lessonId || undefined,
+          }).catch(() => {});
+        } catch (persistError) {
+          console.error(
+            "[gemini-ai] failed to persist usage after live stream",
+            persistError
+          );
         }
 
-        recordStudentActivity(id, "ai_query", {
-          courseId: courseId || undefined,
-          lessonId: lessonId || undefined,
-        }).catch(() => {});
-
-        res.write(`event: end\ndata: {}\n\n`);
-        res.end();
+        if (!res.writableEnded) {
+          res.write(`event: end\ndata: {}\n\n`);
+          res.end();
+        }
       });
 
     } catch (error: any) {
@@ -2614,7 +2656,10 @@ export class GeminiAiV2Controller {
       let pendingText = "";
 
       const maybeEnd = async () => {
-        if (textComplete && pendingAudio === 0) {
+        if (!textComplete || pendingAudio !== 0) {
+          return;
+        }
+        try {
           const estimatedPromptTokens = estimateTokens(prompt);
           const estimatedCompletionTokens = estimateTokens(fullAnswer);
           const estimatedTotalTokens =
@@ -2640,7 +2685,14 @@ export class GeminiAiV2Controller {
             courseId: courseId || undefined,
             lessonId: lessonId || undefined,
           }).catch(() => {});
+        } catch (persistError) {
+          console.error(
+            "[gemini-ai] failed to persist usage after audio text stream",
+            persistError
+          );
+        }
 
+        if (!res.writableEnded) {
           res.write(`event: end\ndata: {}\n\n`);
           res.end();
         }
@@ -2941,32 +2993,50 @@ export class GeminiAiV2Controller {
       res.write(`event: end\ndata: {}\n\n`);
       res.end();
 
-      const estimatedPromptTokens = estimateTokens(prompt);
-      const estimatedCompletionTokens = estimateTokens(fullAnswer);
-      const estimatedTotalTokens =
-        estimatedPromptTokens + estimatedCompletionTokens;
+      try {
+        const estimatedPromptTokens = estimateTokens(prompt);
+        const estimatedCompletionTokens = estimateTokens(fullAnswer);
+        const estimatedTotalTokens =
+          estimatedPromptTokens + estimatedCompletionTokens;
 
-      const aiUsage = new AiUsage({
-        student: id,
-        course: courseId || undefined,
-        lesson: lessonId || undefined,
-        s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        queryType: "chat",
-        question,
-        answer: fullAnswer,
-        prompt_tokens: estimatedPromptTokens,
-        completion_tokens: estimatedCompletionTokens,
-        total_tokens: estimatedTotalTokens,
-        model: GEMINI_CHAT_MODEL,
-        cost_estimate_usd: 0,
-      });
-      await aiUsage.save();
+        const aiUsage = new AiUsage({
+          student: id,
+          course: courseId || undefined,
+          lesson: lessonId || undefined,
+          s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
+          queryType: "chat",
+          question,
+          answer: fullAnswer,
+          prompt_tokens: estimatedPromptTokens,
+          completion_tokens: estimatedCompletionTokens,
+          total_tokens: estimatedTotalTokens,
+          model: GEMINI_CHAT_MODEL,
+          cost_estimate_usd: 0,
+        });
+        await aiUsage.save();
 
-      recordStudentActivity(id, "ai_query", {
-        courseId: courseId || undefined,
-        lessonId: lessonId || undefined,
-      }).catch(() => {});
+        recordStudentActivity(id, "ai_query", {
+          courseId: courseId || undefined,
+          lessonId: lessonId || undefined,
+        }).catch(() => {});
+      } catch (persistError) {
+        console.error(
+          "[gemini-ai] failed to persist usage after SSE end",
+          persistError
+        );
+      }
     } catch (error: any) {
+      if (res.headersSent) {
+        res.write(
+          `event: error\ndata: ${JSON.stringify({
+            message: "System error during Gemini AI audio query.",
+            error: error.message,
+          })}\n\n`
+        );
+        res.write(`event: end\ndata: {}\n\n`);
+        res.end();
+        return;
+      }
       return res.status(500).json({
         success: false,
         message: "System error during Gemini AI audio query.",

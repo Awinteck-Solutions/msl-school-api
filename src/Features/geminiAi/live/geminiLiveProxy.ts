@@ -60,6 +60,15 @@ export const attachGeminiLiveProxy = (server: http.Server) => {
 
     const upstream = new WebSocket(`${LIVE_ENDPOINT}?key=${apiKey}`);
 
+    const safeSend = (socket: WebSocket, payload: WebSocket.Data) => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      try {
+        socket.send(payload);
+      } catch (error) {
+        console.error("[gemini-live] ws send failed", error);
+      }
+    };
+
     const closeBoth = (code?: number, reason?: string) => {
       if (client.readyState === WebSocket.OPEN) {
         client.close(code, reason);
@@ -70,7 +79,8 @@ export const attachGeminiLiveProxy = (server: http.Server) => {
     };
 
     upstream.on("open", () => {
-      client.send(
+      safeSend(
+        client,
         JSON.stringify({
           event: "ready",
           message: "Gemini Live proxy connected",
@@ -79,14 +89,13 @@ export const attachGeminiLiveProxy = (server: http.Server) => {
     });
 
     upstream.on("message", (data) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(data);
-      }
+      safeSend(client, data);
     });
 
     upstream.on("error", (err) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(
+        safeSend(
+          client,
           JSON.stringify({
             event: "error",
             message: "Upstream error",
@@ -102,9 +111,7 @@ export const attachGeminiLiveProxy = (server: http.Server) => {
     });
 
     client.on("message", (data) => {
-      if (upstream.readyState === WebSocket.OPEN) {
-        upstream.send(data);
-      }
+      safeSend(upstream, data);
     });
 
     client.on("close", () => {

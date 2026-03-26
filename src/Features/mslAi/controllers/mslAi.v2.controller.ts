@@ -234,26 +234,38 @@ HTML Output Requirements:
 
       res.end();
 
-      const estimatedPromptTokens = estimateTokens(question);
-      const estimatedCompletionTokens = estimateTokens(fullAnswer);
-      const estimatedTotalTokens = estimatedPromptTokens + estimatedCompletionTokens;
-      const promptCost = (estimatedPromptTokens / 1000000) * 0.15;
-      const completionCost = (estimatedCompletionTokens / 1000000) * 0.6;
-      const totalCostEstimate = promptCost + completionCost;
+      try {
+        const estimatedPromptTokens = estimateTokens(question);
+        const estimatedCompletionTokens = estimateTokens(fullAnswer);
+        const estimatedTotalTokens =
+          estimatedPromptTokens + estimatedCompletionTokens;
+        const promptCost = (estimatedPromptTokens / 1000000) * 0.15;
+        const completionCost = (estimatedCompletionTokens / 1000000) * 0.6;
+        const totalCostEstimate = promptCost + completionCost;
 
-      const aiUsage = new AiUsage({
-        student: studentId,
-        course: null,
-        question,
-        answer: fullAnswer,
-        prompt_tokens: estimatedPromptTokens,
-        completion_tokens: estimatedCompletionTokens,
-        total_tokens: estimatedTotalTokens,
-        model: "gpt-5.1",
-        cost_estimate_usd: totalCostEstimate,
-      });
-      await aiUsage.save();
+        const aiUsage = new AiUsage({
+          student: studentId,
+          course: null,
+          question,
+          answer: fullAnswer,
+          prompt_tokens: estimatedPromptTokens,
+          completion_tokens: estimatedCompletionTokens,
+          total_tokens: estimatedTotalTokens,
+          model: "gpt-5.1",
+          cost_estimate_usd: totalCostEstimate,
+        });
+        await aiUsage.save();
+      } catch (persistError) {
+        console.error(
+          "[msl-ai] failed to persist usage after stream end",
+          persistError
+        );
+      }
     } catch (error: any) {
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
       return res.status(500).json({
         success: false,
         message: "System error during MSL AI general query.",

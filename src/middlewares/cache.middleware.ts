@@ -35,7 +35,11 @@ export const cacheMiddleware = (options: CacheOptions = {}) => {
       const originalJson = res.json.bind(res);
       res.json = (body: unknown) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          redis.setEx(key, ttlSeconds, JSON.stringify(body));
+          redis
+            .setEx(key, ttlSeconds, JSON.stringify(body))
+            .catch((cacheError) => {
+              console.error("[cache] redis setEx failed", cacheError);
+            });
         }
         return originalJson(body);
       };

@@ -124,7 +124,8 @@ export class AdminRequestV2Controller {
   }
 
   static async toggle(req: Request, res: Response) {
-    const { id } = req.params;
+    try {
+      const { id } = req.params;
     const { status } = req.body;
     const normalizedStatus =
       typeof status === "string" ? status.trim().toUpperCase() : undefined;
@@ -153,6 +154,13 @@ export class AdminRequestV2Controller {
           message: "Request failed",
         });
       });
+    } catch (error) {
+      return res.status(500).json({
+        status: false,
+        message: "System Error",
+        other: error,
+      });
+    }
   }
 
   static async delete(req: Request, res: Response) {

@@ -24,7 +24,6 @@ app.use(bodyParser.json({
 }))
 app.use(bodyParser.urlencoded({extended: true}))
 app.use(requestLogger)
-app.use(errorHandler)
 app.use(Router)
 
 
@@ -35,6 +34,8 @@ app.get('/', (req: Request, res: Response) => {
         message: 'Welcome to MSL Business Version 2.0.0'
     })
 })
+
+app.use(errorHandler)
 
 
 
