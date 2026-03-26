@@ -159,7 +159,7 @@ export class AdminRequestV2Controller {
     } catch (error) {
       return res.status(500).json({
         status: false,
-        message: "System Error",
+        message: "System Error - 2026-26-03",
         other: error,
       });
     }
