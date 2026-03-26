@@ -126,7 +126,9 @@ export class AdminRequestV2Controller {
   static async toggle(req: Request, res: Response) {
     try {
       const { id } = req.params;
-    const { status } = req.body;
+      const { status } = req.body;
+      console.log("id::", id);
+      console.log("status::", status);
     const normalizedStatus =
       typeof status === "string" ? status.trim().toUpperCase() : undefined;
     if (!id || !normalizedStatus) {
