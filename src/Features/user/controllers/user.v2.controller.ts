@@ -11,6 +11,53 @@ interface MulterRequest extends Request {
   files?: multer.File[];
 }
 export class UserV2Controller {
+  static async refreshToken(req: Request, res: Response) {
+    try {
+      const { id } = req["currentUser"] as { id?: string };
+      if (!id) {
+        return res.status(401).json({
+          status: false,
+          message: "Unauthorized",
+        });
+      }
+
+      const user = await User.findById(id).lean();
+      if (!user) {
+        return res.status(404).json({
+          status: false,
+          message: "User not found",
+        });
+      }
+      if (user.status !== Status.ACTIVE) {
+        return res.status(403).json({
+          status: false,
+          message: "User inactive",
+        });
+      }
+
+      const token = encrypt.generateToken({
+        id: user._id,
+        email: user.email,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        role: user.role,
+        status: user.status,
+      });
+
+      return res.status(200).json({
+        status: true,
+        message: "Token refreshed",
+        user: { id: user._id, email: user.email, firstname: user.firstname, lastname: user.lastname, role: user.role, status: user.status, token },
+      });
+    } catch (error) {
+      return res.status(500).json({
+        status: false,
+        message: "System error",
+        other: error,
+      });
+    }
+  }
+
   static async socialAuth(req: Request, res: Response) {
     const {firstname, lastname, email, auth_type, device_id, apple_user_id} =
       req.body;

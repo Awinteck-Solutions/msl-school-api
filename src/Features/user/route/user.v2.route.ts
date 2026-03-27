@@ -29,6 +29,15 @@ Router.post("/auth", (req: Request, res: Response) => {
   UserV2Controller.socialAuth(req, res);
 });
 
+Router.post(
+  "/refresh-token",
+  authentification,
+  authorization([Roles.USER, Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    UserV2Controller.refreshToken(req, res);
+  }
+);
+
 
 Router.patch(
   "/upload_image",
