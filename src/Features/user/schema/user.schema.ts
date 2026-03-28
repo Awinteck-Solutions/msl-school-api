@@ -17,6 +17,8 @@ const userSchema = new Schema({
     firstname: {type: String, default: null},
     lastname: {type: String, default: null},
     image: {type: String, default: null},
+    firebase_token: {type: String, required: false},
+    timezone: {type: String, default: "UTC"},
   otp: { type: String, required: true },
   role: {
     type: String,

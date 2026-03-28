@@ -3,9 +3,12 @@ import LessonProgress from "../../lesson/schema/lessonProgress.schema";
 import Lesson from "../../lesson/schema/lesson.schema";
 import QuizResponse from "../../quiz/schema/quizResponse.schema";
 import Course from "../../course/schema/course.schema";
+import User from "../../user/schema/user.schema";
+import { sendFirebaseNotification } from "../../../helpers/firebase";
 
 export type ActivityType =
   | "ai_query"
+  | "auth_activity"
   | "lesson_complete"
   | "quiz_complete"
   | "flashcard_session";
@@ -21,32 +24,53 @@ export interface ActivityMetadata {
 
 const XP_BY_ACTIVITY: Record<ActivityType, number> = {
   ai_query: 10,
+  auth_activity: 0,
   lesson_complete: 20,
   quiz_complete: 15,
   flashcard_session: 10,
 };
 
 const DAILY_BONUS_XP = 5;
-const DAILY_CHALLENGE_TARGET = { ai_query: 3 };
+const DAILY_CHALLENGE_TARGET = { ai_query: 3 }; // means complete 3 ai queries in a day to get the reward
 const DAILY_CHALLENGE_REWARD_XP = 20;
-const WEEKLY_CHALLENGE_TARGET = { lesson_complete: 5 };
+const WEEKLY_CHALLENGE_TARGET = { lesson_complete: 5 }; // means complete 5 lessons in a week to get the reward
 const WEEKLY_CHALLENGE_REWARD_XP = 50;
 
 export function getLevelFromXp(totalXp: number): number {
   if (totalXp <= 0) return 1;
-  return Math.floor(1 + Math.sqrt(totalXp / 50));
+  return Math.floor(1 + Math.sqrt(totalXp / 50)); // means level 1 is 50 xp, level 2 is 100 xp, level 3 is 150 xp, etc.
 }
 
-function getTodayUtc(): string {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+export function normalizeTimeZone(timeZone?: string): string {
+  const fallback = "UTC";
+  if (!timeZone) return fallback;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+    return timeZone;
+  } catch {
+    return fallback;
+  }
 }
 
-function getWeekId(): string {
-  const d = new Date();
-  const start = new Date(d);
-  start.setUTCDate(d.getUTCDate() - d.getUTCDay());
-  return start.toISOString().slice(0, 10);
+export function formatDateInZone(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+export function getTodayKey(timeZone: string): string {
+  return formatDateInZone(new Date(), timeZone);
+}
+
+function getWeekId(timeZone: string): string {
+  const now = new Date();
+  const localNow = new Date(now.toLocaleString("en-US", { timeZone }));
+  const start = new Date(localNow);
+  start.setDate(localNow.getDate() - localNow.getDay());
+  return formatDateInZone(start, timeZone);
 }
 
 function ensureChallengeCounts(c: any): Record<string, number> {
@@ -62,15 +86,22 @@ function ensureChallengeCounts(c: any): Record<string, number> {
 export async function recordStudentActivity(
   studentId: string,
   activityType: ActivityType,
-  metadata?: ActivityMetadata
+  metadata?: ActivityMetadata,
+  options?: { timeZone?: string }
 ): Promise<void> {
-  const today = getTodayUtc();
-  const weekId = getWeekId();
+  try {
+  const user = await User.findById(studentId)
+    .select("firebase_token timezone")
+    .lean();
+  const timeZone = normalizeTimeZone(options?.timeZone || (user as any)?.timezone);
+  const today = getTodayKey(timeZone);
+  const weekId = getWeekId(timeZone);
 
   let doc = await StudentGamification.findOne({ student: studentId });
   if (!doc) {
     doc = new StudentGamification({
       student: studentId,
+      lastActiveDateKey: null,
       lastActiveDate: null,
       currentStreak: 0,
       longestStreak: 0,
@@ -79,14 +110,18 @@ export async function recordStudentActivity(
       badges: [],
     });
   }
-
-  const lastDate = doc.lastActiveDate
-    ? new Date(doc.lastActiveDate).toISOString().slice(0, 10)
-    : null;
-  const yesterday = new Date();
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
-
+  const levelBefore = doc.level ?? getLevelFromXp(doc.totalXp || 0);
+// check if the student has been active today
+  const lastDate =
+    (doc as any).lastActiveDateKey ||
+    (doc.lastActiveDate
+      ? formatDateInZone(new Date(doc.lastActiveDate), timeZone)
+      : null);
+  const yesterdayStr = formatDateInZone(
+    new Date(Date.now() - 24 * 60 * 60 * 1000),
+    timeZone
+  );
+// if the student has not been active today, then set the current streak to 1
   if (lastDate !== today) {
     if (lastDate === yesterdayStr) {
       doc.currentStreak = (doc.currentStreak || 0) + 1;
@@ -95,8 +130,9 @@ export async function recordStudentActivity(
     } else {
       doc.currentStreak = 1;
     }
-    doc.lastActiveDate = new Date(today + "T00:00:00.000Z");
-    if (doc.currentStreak > (doc.longestStreak || 0)) {
+    (doc as any).lastActiveDateKey = today; // date key is different from the last active date because the last active date is in the local time zone, but the date key is in the UTC time zone example: 2026-03-28T00:00:00.000Z is different from 2026-03-28
+    doc.lastActiveDate = new Date();
+    if (doc.currentStreak > (doc.longestStreak || 0)) { // if the current streak is greater than the longest streak, then set the longest streak to the current streak
       doc.longestStreak = doc.currentStreak;
     }
   }
@@ -104,15 +140,17 @@ export async function recordStudentActivity(
   let xpToAdd = XP_BY_ACTIVITY[activityType] ?? 0;
   if (activityType === "quiz_complete" && metadata?.totalQuestions && metadata?.totalCorrect) {
     const pct = metadata.totalQuestions > 0 ? metadata.totalCorrect / metadata.totalQuestions : 0;
-    if (pct >= 0.8) xpToAdd += 5;
+    if (pct >= 0.8) xpToAdd += 5; // if the percentage of correct answers is greater than 80%, then add 5 xp
   }
 
   const badgeIds = new Set((doc.badges || []).map((b: any) => b.id));
 
+  const newBadgeIds: string[] = [];
   if (activityType === "ai_query" && !badgeIds.has("first_question")) {
     doc.badges = doc.badges || [];
     doc.badges.push({ id: "first_question", earnedAt: new Date() });
     badgeIds.add("first_question");
+    newBadgeIds.push("first_question");
   }
 
   doc.totalXp = (doc.totalXp || 0) + xpToAdd;
@@ -122,26 +160,31 @@ export async function recordStudentActivity(
     doc.badges = doc.badges || [];
     doc.badges.push({ id: "streak_7", earnedAt: new Date() });
     badgeIds.add("streak_7");
+    newBadgeIds.push("streak_7");
   }
   if (doc.currentStreak >= 30 && !badgeIds.has("streak_30")) {
     doc.badges = doc.badges || [];
     doc.badges.push({ id: "streak_30", earnedAt: new Date() });
     badgeIds.add("streak_30");
+    newBadgeIds.push("streak_30");
   }
   if (doc.currentStreak >= 100 && !badgeIds.has("streak_100")) {
     doc.badges = doc.badges || [];
     doc.badges.push({ id: "streak_100", earnedAt: new Date() });
     badgeIds.add("streak_100");
+    newBadgeIds.push("streak_100");
   }
   if (doc.totalXp >= 100 && !badgeIds.has("xp_100")) {
     doc.badges = doc.badges || [];
     doc.badges.push({ id: "xp_100", earnedAt: new Date() });
     badgeIds.add("xp_100");
+    newBadgeIds.push("xp_100");
   }
   if (doc.totalXp >= 500 && !badgeIds.has("xp_500")) {
     doc.badges = doc.badges || [];
     doc.badges.push({ id: "xp_500", earnedAt: new Date() });
     badgeIds.add("xp_500");
+    newBadgeIds.push("xp_500");
   }
 
   if (activityType === "quiz_complete") {
@@ -150,6 +193,7 @@ export async function recordStudentActivity(
       doc.badges = doc.badges || [];
       doc.badges.push({ id: "quiz_master", earnedAt: new Date() });
       badgeIds.add("quiz_master");
+      newBadgeIds.push("quiz_master");
     }
   }
 
@@ -167,6 +211,7 @@ export async function recordStudentActivity(
       doc.badges = doc.badges || [];
       doc.badges.push({ id: "course_complete", earnedAt: new Date() });
       badgeIds.add("course_complete");
+      newBadgeIds.push("course_complete");
     }
   }
 
@@ -191,6 +236,7 @@ export async function recordStudentActivity(
   };
   doc.dailyChallenge.periodId = today;
   doc.dailyChallenge.counts = counts;
+  const dailyWasRewarded = Boolean(daily?.rewarded);
   if (
     !doc.dailyChallenge.rewarded &&
     counts.ai_query >= DAILY_CHALLENGE_TARGET.ai_query
@@ -221,6 +267,7 @@ export async function recordStudentActivity(
   };
   doc.weeklyChallenge.periodId = weekId;
   doc.weeklyChallenge.counts = wCounts;
+  const weeklyWasRewarded = Boolean(weekly?.rewarded);
   if (
     !doc.weeklyChallenge.rewarded &&
     wCounts.lesson_complete >= WEEKLY_CHALLENGE_TARGET.lesson_complete
@@ -230,7 +277,56 @@ export async function recordStudentActivity(
     doc.level = getLevelFromXp(doc.totalXp);
   }
 
+  doc.level = getLevelFromXp(doc.totalXp);
+
   await doc.save();
+
+  const firebaseToken = (user as any)?.firebase_token as string | undefined;
+  if (!firebaseToken) return;
+
+  const notifications: { title: string; body: string; data: Record<string, string> }[] =
+    [];
+
+  for (const badgeId of newBadgeIds) {
+    notifications.push({
+      title: "New badge earned!",
+      body: `You unlocked ${badgeId.replace(/_/g, " ")}.`,
+      data: { type: "gamification", event: "badge", badgeId },
+    });
+  }
+
+  if (!dailyWasRewarded && doc.dailyChallenge?.rewarded) {
+    notifications.push({
+      title: "Daily challenge complete!",
+      body: `You earned ${DAILY_CHALLENGE_REWARD_XP} XP.`,
+      data: { type: "gamification", event: "daily_challenge" },
+    });
+  }
+
+  if (!weeklyWasRewarded && doc.weeklyChallenge?.rewarded) {
+    notifications.push({
+      title: "Weekly challenge complete!",
+      body: `You earned ${WEEKLY_CHALLENGE_REWARD_XP} XP.`,
+      data: { type: "gamification", event: "weekly_challenge" },
+    });
+  }
+
+  if (doc.level > levelBefore) {
+    notifications.push({
+      title: "Level up!",
+      body: `You reached level ${doc.level}.`,
+      data: { type: "gamification", event: "level_up", level: String(doc.level) },
+    });
+  }
+
+  for (const payload of notifications) {
+    sendFirebaseNotification(firebaseToken, payload).catch((error) => {
+      console.error("[gamification] notification failed", error);
+    });
+  }
+  } catch (error) {
+    console.error("[gamification] recordStudentActivity failed", error);
+  }
 }
 
 export async function getCourseProgressForStudent(

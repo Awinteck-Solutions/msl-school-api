@@ -323,7 +323,7 @@ export class AdminUserV2Controller {
       if (!user) {
         return res.status(404).json({
           status: false,
-          message: "User not found",
+          message: "User not found(student not included)",
         });
       }
 

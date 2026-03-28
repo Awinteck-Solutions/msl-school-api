@@ -34,6 +34,7 @@
       "express": "^5.2.1",
       "express-rate-limit": "^8.2.1",
       "express-session": "^1.18.1",
+      "firebase-admin": "^13.7.0",
       "formidable": "^3.5.4",
       "google-auth-library": "^10.5.0",
       "ip": "^2.0.1",

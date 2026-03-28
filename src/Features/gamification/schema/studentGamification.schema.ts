@@ -36,6 +36,7 @@ const studentGamificationSchema = new Schema(
       required: true,
       unique: true,
     },
+    lastActiveDateKey: { type: String, default: null },
     lastActiveDate: { type: Date, default: null },
     currentStreak: { type: Number, default: 0 },
     longestStreak: { type: Number, default: 0 },

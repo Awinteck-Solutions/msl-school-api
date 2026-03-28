@@ -1,9 +1,13 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 import StudentGamification from "../schema/studentGamification.schema";
+import User from "../../user/schema/user.schema";
 import {
   getCourseProgressForStudent,
   getLevelFromXp,
+  getTodayKey,
+  formatDateInZone,
+  normalizeTimeZone,
 } from "../service/gamification.service";
 
 export class GamificationV2Controller {
@@ -33,10 +37,17 @@ export class GamificationV2Controller {
       }
 
       const courseProgress = await getCourseProgressForStudent(id);
-      const today = new Date().toISOString().slice(0, 10);
-      const lastDate = (doc as any).lastActiveDate
-        ? new Date((doc as any).lastActiveDate).toISOString().slice(0, 10)
-        : null;
+      const headerTimeZone = req.headers["x-timezone"] as string | undefined;
+      const user = await User.findById(id).select("timezone").lean();
+      const timeZone = normalizeTimeZone(
+        headerTimeZone || (user as any)?.timezone
+      );
+      const today = getTodayKey(timeZone);
+      const lastDate =
+        (doc as any).lastActiveDateKey ||
+        ((doc as any).lastActiveDate
+          ? formatDateInZone(new Date((doc as any).lastActiveDate), timeZone)
+          : null);
       const streakAtRisk = lastDate !== null && lastDate !== today;
 
       return res.status(200).json({
