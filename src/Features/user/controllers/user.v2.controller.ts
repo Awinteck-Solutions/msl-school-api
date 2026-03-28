@@ -117,6 +117,7 @@ export class UserV2Controller {
             role: existing.role,
             status: existing.status,
             timezone: existing.timezone,
+            firebase_token: existing.firebase_token,
           });
 
           return res.status(200).json({
@@ -149,6 +150,7 @@ export class UserV2Controller {
           role: created.role,
           status: created.status,
           timezone: created.timezone,
+          firebase_token: created.firebase_token,
         });
 
         return res.status(200).json({
@@ -196,6 +198,7 @@ export class UserV2Controller {
           role: result.role,
           status: result.status,
           timezone: result.timezone,
+          firebase_token: result.firebase_token,
         });
 
         return res.status(200).json({

@@ -1,14 +1,7 @@
 import * as admin from "firebase-admin";
 
 const getServiceAccount = () => {
-  const raw =
-    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
-    (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
-      ? Buffer.from(
-          process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
-          "base64"
-        ).toString("utf8")
-      : "");
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -45,10 +38,6 @@ export const sendFirebaseNotification = async (
   const app = getFirebaseApp();
   if (!app) return;
   if (!token) return;
-  console.log("------------------FIREBASE NOTIFICATION--------------");
-  console.log("payload", payload);
-  console.log("token", token);
-  console.log("app", app);
   await app.messaging().send({
     token,
     notification: {

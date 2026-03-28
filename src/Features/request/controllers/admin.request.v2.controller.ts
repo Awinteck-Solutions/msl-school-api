@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import Requests from "../schema/request.schema";
+import { sendFirebaseNotification } from "../../../helpers/firebase";
 
 export class AdminRequestV2Controller {
   static async all(req: Request, res: Response) {
@@ -143,8 +144,19 @@ export class AdminRequestV2Controller {
         message: "Invalid status. Use ACTIVE or DEACTIVE.",
       });
     }
-    Requests.updateOne({ _id: id }, { status: normalizedStatus }, { upsert: false })
-      .then(() => {
+    Requests.findOneAndUpdate({ _id: id }, { status: normalizedStatus }, { upsert: false }).populate("course")
+      .then((result: any) => {
+        const course = result.course;
+        console.log("course::", course.title);
+        const firebaseToken = (req["currentUser"] as any).firebase_token;
+        console.log("firebaseToken::", firebaseToken);
+        if (normalizedStatus === "ACTIVE") {
+            sendFirebaseNotification((req["currentUser"] as any).firebase_token, {
+              title: "Course Request Approved",
+              body: `Your request has been approved for ${course.title}`,
+              data: { type: "request", event: "request_approved", course: course._id.toString() },
+            });
+        }
         return res.status(201).json({
           status: true,
           message: "request success",

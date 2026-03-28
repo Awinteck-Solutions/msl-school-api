@@ -37,6 +37,7 @@ const studentGamificationSchema = new Schema(
       unique: true,
     },
     lastActiveDateKey: { type: String, default: null },
+    streakReminderDateKey: { type: String, default: null }, // for streak reminder cron
     lastActiveDate: { type: Date, default: null },
     currentStreak: { type: Number, default: 0 },
     longestStreak: { type: Number, default: 0 },

@@ -3,11 +3,12 @@ import Requests from "../schema/request.schema";
 
 export class RequestV2Controller {
   static async add(req: Request, res: Response) {
-    const { email, courseId } = req.body;
-    if (!email && !courseId) {
+    const { courseId } = req.body;
+    const email = (req["currentUser"] as any).email;
+    if (!courseId) {
       return res.status(401).json({
         status: false,
-        message: "missing fields",
+        message: "missing fields - courseId",
       });
     }
 
