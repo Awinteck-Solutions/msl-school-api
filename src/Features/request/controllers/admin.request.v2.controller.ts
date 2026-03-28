@@ -150,6 +150,7 @@ export class AdminRequestV2Controller {
         console.log("course::", course.title);
         const firebaseToken = (req["currentUser"] as any).firebase_token;
         console.log("firebaseToken::", firebaseToken);
+        console.log("email::", (req["currentUser"] as any).email);
         if (normalizedStatus === "ACTIVE") {
             sendFirebaseNotification((req["currentUser"] as any).firebase_token, {
               title: "Course Request Approved",
