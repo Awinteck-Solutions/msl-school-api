@@ -720,7 +720,7 @@ export class GeminiAiV2Controller {
       if (s3Key) {
         filter.s3Keys = s3Key;
       }
-
+// updated query to include all query types except chat
       const [history, total] = await Promise.all([
         AiUsage.find(filter)
           .sort({ createdAt: -1 })
