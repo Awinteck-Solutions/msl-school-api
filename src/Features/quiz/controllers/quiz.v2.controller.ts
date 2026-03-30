@@ -400,6 +400,7 @@ export class QuizV2Controller {
 
   static async single(req: Request, res: Response) {
     const { id } = req.params;
+    console.log('id', id)
 
     if (!id || !mongoose.Types.ObjectId.isValid(id as string)) {
       return res.status(400).json({ error: "Invalid or missing quiz ID" });
@@ -417,7 +418,7 @@ export class QuizV2Controller {
         quiz: 1,
         students: 1,
       })
-        .populate("students")
+        // .populate("students")
         .populate({
           path: "course",
           select: "title thumbnail status",
