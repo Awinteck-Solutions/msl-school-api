@@ -28,7 +28,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t mslapp:latest .
+          docker build --no-cache -t mslapp:latest .
 
       - name: Tag image
         run: |
