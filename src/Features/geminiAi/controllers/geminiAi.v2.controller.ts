@@ -695,7 +695,9 @@ export class GeminiAiV2Controller {
 
       const filter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
-        queryType: { $ne: "chat" },
+        // queryType: { $ne: "chat" }, 
+        // include query types: generate-flashcards, generate-quiz, summarize
+        queryType: { $in: ["generate-flashcards", "generate-quiz", "summarize"] },
       };
       if (courseId) {
         if (!mongoose.Types.ObjectId.isValid(courseId)) {
@@ -718,22 +720,15 @@ export class GeminiAiV2Controller {
       if (s3Key) {
         filter.s3Keys = s3Key;
       }
-      if (!courseId && !lessonId && !s3Key) {
-        filter.$and = [
-          { $or: [{ course: { $exists: false } }, { course: null }] },
-          { $or: [{ lesson: { $exists: false } }, { lesson: null }] },
-          {
-            $or: [
-              { s3Keys: { $exists: false } },
-              { s3Keys: null },
-              { s3Keys: { $size: 0 } },
-            ],
-          },
-        ];
-      }
 
       const [history, total] = await Promise.all([
-        AiUsage.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+        AiUsage.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate({ path: "course", select: "title" })
+          .populate({ path: "lesson", select: "title" })
+          .lean(),
         AiUsage.countDocuments(filter),
       ]);
 
@@ -746,6 +741,14 @@ export class GeminiAiV2Controller {
       };
 
       const items = history.map((row: any) => {
+        const lessonTitle =
+          row.lesson && typeof row.lesson === "object"
+            ? row.lesson.title
+            : undefined;
+        const courseTitle =
+          row.course && typeof row.course === "object"
+            ? row.course.title
+            : undefined;
         const base = {
           _id: row._id,
           student: row.student,
@@ -756,6 +759,7 @@ export class GeminiAiV2Controller {
           question: row.question,
           model: row.model,
           createdAt: row.createdAt,
+          title: lessonTitle || courseTitle || null,
         };
 
         if (row.queryType === "generate-flashcards") {
