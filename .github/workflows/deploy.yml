@@ -33,12 +33,12 @@ jobs:
       - name: Tag image
         run: |
           docker tag mslapp:${{ github.sha }} \
-          ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:version2
+          ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:${{ github.sha }}
 
       - name: Push image to ECR
         run: |
           docker push \
-          ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:version2
+          ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:${{ github.sha }}
 
       - name: Deploy on EC2
         uses: appleboy/ssh-action@v1
@@ -47,10 +47,10 @@ jobs:
           username: ubuntu
           key: ${{ secrets.SERVER_SSH_KEY_MSL }}
           script: |
-            docker pull ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:version2
+            docker pull ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:${{ github.sha }}
             docker stop mslapp-container || true
             docker rm mslapp-container || true
             docker run -d -p 8081:4001 \
               --name mslapp-container \
               --env-file .env-msl \
-              ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:version2
+              ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:${{ github.sha }}
