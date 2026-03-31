@@ -429,6 +429,8 @@ export class CourseV2Controller {
         filter.categoryId = new mongoose.Types.ObjectId(categoryId);
       }
 
+      filter.status = "ACTIVE";
+
       const matchStage = { $match: filter };
       const searchRegex = search ? new RegExp(search, "i") : null;
 

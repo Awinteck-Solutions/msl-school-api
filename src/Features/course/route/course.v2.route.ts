@@ -33,7 +33,7 @@ Router.get(
   "/",
   authentification,
   authorization([Roles.USER, Roles.ADMIN]),
-  cacheMiddleware({ ttlSeconds: CacheTtl.ONE_HOUR, keyPrefix: "course:all" }),
+  cacheMiddleware({ ttlSeconds: CacheTtl.TWO_MINUTES, keyPrefix: "course:all" }),
   (req: Request, res: Response) => {
     CourseV2Controller.courseAllV2(req, res);
   }
