@@ -31,6 +31,13 @@ const getPurpose = (method: string, endpoint: string): string | undefined => {
     { method: "PATCH", pattern: toRegex("/admin/faq/:id"), purpose: "UPDATE-FAQ" },
     { method: "DELETE", pattern: toRegex("/admin/faq/:id"), purpose: "DELETE-FAQ" },
 
+    // Adverts
+    { method: "GET", pattern: toRegex("/adverts"), purpose: "VIEW-ACTIVE-ADVERTS" },
+    { method: "GET", pattern: toRegex("/admin/adverts"), purpose: "VIEW-ADMIN-ADVERT-LIST" },
+    { method: "POST", pattern: toRegex("/admin/adverts"), purpose: "CREATE-ADVERT" },
+    { method: "PATCH", pattern: toRegex("/admin/adverts/:id"), purpose: "UPDATE-ADVERT" },
+    { method: "DELETE", pattern: toRegex("/admin/adverts/:id"), purpose: "DELETE-ADVERT" },
+
     // Payments
     { method: "POST", pattern: toRegex("/payment/initiate"), purpose: "INITIATE-PAYMENT" },
     { method: "GET", pattern: toRegex("/payment/verify/:reference"), purpose: "VERIFY-PAYMENT" },

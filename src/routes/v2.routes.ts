@@ -27,6 +27,8 @@ import adminEnrolmentRoutes from "../Features/enrolment/route/admin.enrolment.v2
 import adminAnalyticsRoutes from "../Features/analytics/route/admin.analytics.v2.route";
 import adminLogRoutes from "../Features/logs/route/admin.log.v2.route";
 import adminFaqRoutes from "../Features/faqs/route/admin.faq.v2.route";
+import advertV2Routes from "../Features/adverts/route/advert.v2.route";
+import adminAdvertV2Routes from "../Features/adverts/route/admin.advert.v2.route";
 import paymentRoutes from "../Features/payments/route/payment.v2.route";
 import adminPaymentRoutes from "../Features/payments/route/admin.payment.v2.route";
 const Router = express.Router();
@@ -58,6 +60,8 @@ Router.use("/admin/enrolment", adminEnrolmentRoutes);
 Router.use("/admin/analytics", adminAnalyticsRoutes);
 Router.use("/admin/logs", adminLogRoutes);
 Router.use("/admin/faq", adminFaqRoutes);
+Router.use("/adverts", advertV2Routes);
+Router.use("/admin/adverts", adminAdvertV2Routes);
 Router.use("/admin/payment", adminPaymentRoutes);
 Router.use("/payment", paymentRoutes);
 
