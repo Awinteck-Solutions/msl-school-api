@@ -1,6 +1,5 @@
 import * as dotenv from "dotenv";
 import { Readable } from "stream";
-import * as S3 from "aws-sdk/clients/s3";
 import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 
 dotenv.config();
@@ -19,15 +18,16 @@ export const uploadFile = async (
   file: UploadFileInput,
   folder: string
 ): Promise<{ key: string }> => {
-  const fileStream = Readable.from(file.buffer);
-
   const key = `${folder}/${timestamp}_${file.originalname.replace(/\s+/g, "")}`;
+  const body = file.buffer;
+  const contentLength = body.byteLength;
 
   await s3.send(
     new PutObjectCommand({
-      Bucket: bucketName, // ❗ bucket only
+      Bucket: bucketName,
       Key: key,
-      Body: fileStream,
+      Body: body,
+      ContentLength: contentLength,
     })
   );
 

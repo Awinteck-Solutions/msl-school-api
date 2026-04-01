@@ -953,6 +953,7 @@ export class AdminLessonV2Controller {
         });
       }
     } catch (error) {
+      console.log('error :>> ', error);
       return res.status(500).json({
         status: false,
         message: "System Error",

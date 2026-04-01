@@ -6,7 +6,92 @@ import Quiz from "../schema/quiz.schema";
 import Lesson from "../../lesson/schema/lesson.schema";
 import LessonProgress from "../../lesson/schema/lessonProgress.schema";
 
+type CourseLessonProgress = {
+  completed: number;
+  total: number;
+  percentage: number;
+};
+
 export class CourseV2Controller {
+  private static async computeCourseProgressMap(
+    courseIds: string[],
+    studentId: string
+  ): Promise<Record<string, CourseLessonProgress>> {
+    const progressMap: Record<string, CourseLessonProgress> = {};
+    if (
+      !courseIds.length ||
+      !studentId ||
+      !mongoose.Types.ObjectId.isValid(studentId)
+    ) {
+      return progressMap;
+    }
+
+    const validObjectIds = courseIds
+      .filter((cid) => mongoose.Types.ObjectId.isValid(cid))
+      .map((cid) => new mongoose.Types.ObjectId(cid));
+
+    if (!validObjectIds.length) {
+      return progressMap;
+    }
+
+    const lessons = await Lesson.find(
+      {
+        status: "ACTIVE",
+        "linkedCourses.course": { $in: validObjectIds },
+      },
+      { linkedCourses: 1 }
+    ).lean();
+
+    const courseLessonMap: Record<string, Set<string>> = {};
+    lessons.forEach((lesson: { _id: mongoose.Types.ObjectId; linkedCourses?: { course?: unknown }[] }) => {
+      lesson.linkedCourses?.forEach((lc) => {
+        const courseId = lc.course?.toString();
+        if (courseId) {
+          if (!courseLessonMap[courseId]) {
+            courseLessonMap[courseId] = new Set();
+          }
+          courseLessonMap[courseId].add(lesson._id.toString());
+        }
+      });
+    });
+
+    const lessonIds = lessons.map((lesson) => lesson._id);
+    const completedLessons = await LessonProgress.find(
+      { student: studentId, lesson: { $in: lessonIds } },
+      { lesson: 1 }
+    ).lean();
+
+    const completedSet = new Set(
+      completedLessons.map((p: { lesson: { toString: () => string } }) =>
+        p.lesson.toString()
+      )
+    );
+
+    Object.keys(courseLessonMap).forEach((courseId) => {
+      const lessonSet = courseLessonMap[courseId];
+      let completedCount = 0;
+      lessonSet.forEach((lessonId) => {
+        if (completedSet.has(lessonId)) {
+          completedCount += 1;
+        }
+      });
+
+      const totalLessons = lessonSet.size;
+      const percentage =
+        totalLessons > 0
+          ? Math.round((completedCount / totalLessons) * 100)
+          : 0;
+
+      progressMap[courseId] = {
+        completed: completedCount,
+        total: totalLessons,
+        percentage,
+      };
+    });
+
+    return progressMap;
+  }
+
   static async singleV2(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -68,10 +153,31 @@ export class CourseV2Controller {
         });
       }
 
+      const course = result[0] as { _id: mongoose.Types.ObjectId };
+      const studentId = (req["currentUser"] as { id?: string } | undefined)?.id;
+      const defaultProgress: CourseLessonProgress = {
+        completed: 0,
+        total: 0,
+        percentage: 0,
+      };
+
+      let progress = defaultProgress;
+      if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+        const courseIdStr = course._id.toString();
+        const progressMap = await CourseV2Controller.computeCourseProgressMap(
+          [courseIdStr],
+          studentId
+        );
+        progress = progressMap[courseIdStr] ?? defaultProgress;
+      }
+
       return res.status(200).json({
         status: true,
         message: "Course details success",
-        response: result[0],
+        response: {
+          ...course,
+          progress,
+        },
       });
     } catch (error) {
       return res.status(500).json({
@@ -141,70 +247,13 @@ export class CourseV2Controller {
 
       const pagedCourseIds = paginatedCourses.map((course) => course._id);
 
-      let progressMap: Record<
-        string,
-        { completed: number; total: number; percentage: number }
-      > = {};
-
-      if (
-        pagedCourseIds.length > 0 &&
-        id &&
-        mongoose.Types.ObjectId.isValid(id)
-      ) {
-        const lessons = await Lesson.find(
-          {
-            status: "ACTIVE",
-            "linkedCourses.course": { $in: pagedCourseIds },
-          },
-          { linkedCourses: 1 }
-        ).lean();
-
-        const courseLessonMap: Record<string, Set<string>> = {};
-        lessons.forEach((lesson: any) => {
-          lesson.linkedCourses?.forEach((lc: any) => {
-            const courseId = lc.course?.toString();
-            if (courseId) {
-              if (!courseLessonMap[courseId]) {
-                courseLessonMap[courseId] = new Set();
-              }
-              courseLessonMap[courseId].add(lesson._id.toString());
-            }
-          });
-        });
-
-        const lessonIds = lessons.map((lesson: any) => lesson._id);
-        const completedLessons = await LessonProgress.find(
-          { student: id, lesson: { $in: lessonIds } },
-          { lesson: 1 }
-        ).lean();
-
-        const completedSet = new Set(
-          completedLessons.map((progress: any) => progress.lesson.toString())
-        );
-
-        progressMap = {};
-        Object.keys(courseLessonMap).forEach((courseId) => {
-          const lessonSet = courseLessonMap[courseId];
-          let completedCount = 0;
-          lessonSet.forEach((lessonId) => {
-            if (completedSet.has(lessonId)) {
-              completedCount += 1;
-            }
-          });
-
-          const totalLessons = lessonSet.size;
-          const percentage =
-            totalLessons > 0
-              ? Math.round((completedCount / totalLessons) * 100)
-              : 0;
-
-          progressMap[courseId] = {
-            completed: completedCount,
-            total: totalLessons,
-            percentage,
-          };
-        });
-      }
+      const progressMap =
+        pagedCourseIds.length > 0 && id && mongoose.Types.ObjectId.isValid(id)
+          ? await CourseV2Controller.computeCourseProgressMap(
+              pagedCourseIds.map((c) => c._id.toString()),
+              id
+            )
+          : {};
 
       return res.status(200).json({
         status: true,

@@ -44,7 +44,16 @@ Router.get(
   "/:id",
   authentification,
   authorization([Roles.USER, Roles.ADMIN]),
-  cacheMiddleware({ ttlSeconds: CacheTtl.ONE_HOUR, keyPrefix: "course:single" }),
+  cacheMiddleware({
+    ttlSeconds: CacheTtl.ONE_HOUR,
+    keyPrefix: "course:single",
+    keyBuilder: (req) => {
+      const query = new URLSearchParams(req.query as Record<string, string>);
+      const userId =
+        (req["currentUser"] as { id?: string } | undefined)?.id ?? "unknown";
+      return `course:single:${req.method}:${req.baseUrl}${req.path}?${query.toString()}:user:${userId}`;
+    },
+  }),
   (req: Request, res: Response) => {
     CourseV2Controller.singleV2(req, res);
   }

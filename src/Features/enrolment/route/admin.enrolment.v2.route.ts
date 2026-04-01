@@ -114,10 +114,10 @@ Router.get(
   "/by-user/:email",
   authentification,
   authorization([Roles.ADMIN]),
-  // cacheMiddleware({
-  //   ttlSeconds: CacheTtl.THIRTY_MINUTES,
-  //   keyPrefix: "admin:enrolment:user",
-  // }),
+  cacheMiddleware({
+    ttlSeconds: CacheTtl.TEN_MINUTES,
+    keyPrefix: "admin:enrolment:user",
+  }),
   (req: Request, res: Response) => {
     AdminEnrolmentV2Controller.byUser(req, res);
   }

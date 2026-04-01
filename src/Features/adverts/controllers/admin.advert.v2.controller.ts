@@ -43,10 +43,12 @@ export class AdminAdvertV2Controller {
       if (req.file) {
         const result = await uploadFile(req.file, "adverts");
         image = result.key;
-      } else if (typeof req.body.image === "string" && req.body.image.trim()) {
-        image = req.body.image.trim();
+      } else {
+        return res.status(400).json({
+          error: "Missing fields",
+          message: "image file is required",
+        });
       }
-
       if (!image) {
         return res.status(400).json({
           error: "Missing fields",
@@ -62,6 +64,7 @@ export class AdminAdvertV2Controller {
         response: result,
       });
     } catch (error) {
+      console.log('error :>> ', error);
       return res.status(500).json({
         status: false,
         message: "Advert add failed",
