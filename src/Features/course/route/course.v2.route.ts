@@ -13,7 +13,16 @@ Router.get(
   "/user-courses",
   authentification,
   authorization([Roles.USER, Roles.ADMIN]),
-  cacheMiddleware({ ttlSeconds: CacheTtl.ONE_HOUR, keyPrefix: "course:user" }),
+  cacheMiddleware({
+    ttlSeconds: CacheTtl.ONE_HOUR,
+    keyPrefix: "course:user",
+    keyBuilder: (req) => {
+      const query = new URLSearchParams(req.query as Record<string, string>);
+      const userId =
+        (req["currentUser"] as { id?: string } | undefined)?.id ?? "unknown";
+      return `course:user:${req.method}:${req.baseUrl}${req.path}?${query.toString()}:user:${userId}`;
+    },
+  }),
   (req: Request, res: Response) => {
     CourseV2Controller.userCoursesV2(req, res);
   }

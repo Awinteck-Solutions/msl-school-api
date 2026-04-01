@@ -5,6 +5,7 @@ import QuizResponse from "../../quiz/schema/quizResponse.schema";
 import Course from "../../course/schema/course.schema";
 import User from "../../user/schema/user.schema";
 import { sendFirebaseNotification } from "../../../helpers/firebase";
+import FlashCardCompletion from "../../flashcard/schema/flashcardLeaderboard.schema";
 
 export type ActivityType =
   | "ai_query"
@@ -31,14 +32,59 @@ const XP_BY_ACTIVITY: Record<ActivityType, number> = {
 };
 
 const DAILY_BONUS_XP = 5;
-const DAILY_CHALLENGE_TARGET = { ai_query: 3 }; // means complete 3 ai queries in a day to get the reward
+const DAILY_CHALLENGE_TARGET = { ai_query: 3, lesson_complete: 1, quiz_complete: 1, flashcard_session: 1 }; // means complete 3 ai queries in a day to get the reward
 const DAILY_CHALLENGE_REWARD_XP = 20;
-const WEEKLY_CHALLENGE_TARGET = { lesson_complete: 5 }; // means complete 5 lessons in a week to get the reward
+const WEEKLY_CHALLENGE_TARGET = { ai_query: 3, lesson_complete: 5, quiz_complete: 1, flashcard_session: 1 }; // means complete 5 lessons in a week to get the reward
 const WEEKLY_CHALLENGE_REWARD_XP = 50;
+
+type ChallengeCountShape = {
+  ai_query: number;
+  lesson_complete: number;
+  quiz_complete: number;
+  flashcard_session: number;
+};
+
+/** Targets to fulfill for the daily challenge (zeros = not required). */
+export function getDailyChallengeExpectedCounts(): ChallengeCountShape {
+  const t = DAILY_CHALLENGE_TARGET as Partial<ChallengeCountShape>;
+  return {
+    ai_query: t.ai_query ?? 0,
+    lesson_complete: t.lesson_complete ?? 0,
+    quiz_complete: t.quiz_complete ?? 0,
+    flashcard_session: t.flashcard_session ?? 0,
+  };
+}
+
+/** Targets to fulfill for the weekly challenge (zeros = not required). */
+export function getWeeklyChallengeExpectedCounts(): ChallengeCountShape {
+  const t = WEEKLY_CHALLENGE_TARGET as Partial<ChallengeCountShape>;
+  return {
+    ai_query: t.ai_query ?? 0,
+    lesson_complete: t.lesson_complete ?? 0,
+    quiz_complete: t.quiz_complete ?? 0,
+    flashcard_session: t.flashcard_session ?? 0,
+  };
+}
 
 export function getLevelFromXp(totalXp: number): number {
   if (totalXp <= 0) return 1;
   return Math.floor(1 + Math.sqrt(totalXp / 50)); // means level 1 is 50 xp, level 2 is 100 xp, level 3 is 150 xp, etc.
+}
+
+/**
+ * Minimum total XP required to advance from `level` to `level + 1`
+ * (inverse of getLevelFromXp for integer levels).
+ */
+export function getTotalXpThresholdForNextLevel(currentLevel: number): number {
+  if (currentLevel < 1) return 50;
+  return 50 * currentLevel * currentLevel;
+}
+
+/** XP still needed before the next level-up (0 if already past threshold — should not happen). */
+export function getXpRemainingToNextLevel(totalXp: number): number {
+  const level = getLevelFromXp(totalXp);
+  const threshold = getTotalXpThresholdForNextLevel(level);
+  return Math.max(0, threshold - totalXp);
 }
 
 export function normalizeTimeZone(timeZone?: string): string {
@@ -186,6 +232,29 @@ export async function recordStudentActivity(
     badgeIds.add("xp_500");
     newBadgeIds.push("xp_500");
   }
+  if (doc.totalXp >= 1000 && !badgeIds.has("xp_1000")) {
+    doc.badges = doc.badges || [];
+    doc.badges.push({ id: "xp_1000", earnedAt: new Date() });
+    badgeIds.add("xp_1000");
+    newBadgeIds.push("xp_1000");
+  }
+    
+  if (doc.totalXp >= 2000 && !badgeIds.has("xp_2000")) {
+    doc.badges = doc.badges || [];
+    doc.badges.push({ id: "xp_2000", earnedAt: new Date() });
+    badgeIds.add("xp_2000");
+    newBadgeIds.push("xp_2000");
+  }
+    
+  if (activityType === "quiz_complete") {
+    const quizCount = await QuizResponse.countDocuments({ student: studentId });
+    if (quizCount >= 3 && !badgeIds.has("quiz_beginner")) {
+      doc.badges = doc.badges || [];
+      doc.badges.push({ id: "quiz_beginner", earnedAt: new Date() });
+      badgeIds.add("quiz_beginner");
+      newBadgeIds.push("quiz_beginner");
+    }
+  }
 
   if (activityType === "quiz_complete") {
     const quizCount = await QuizResponse.countDocuments({ student: studentId });
@@ -196,6 +265,54 @@ export async function recordStudentActivity(
       newBadgeIds.push("quiz_master");
     }
   }
+    
+  if (activityType === "quiz_complete") {
+    const quizCount = await QuizResponse.countDocuments({ student: studentId });
+    if (quizCount >= 20 && !badgeIds.has("quiz_chief")) {
+      doc.badges = doc.badges || [];
+      doc.badges.push({ id: "quiz_chief", earnedAt: new Date() });
+      badgeIds.add("quiz_chief");
+      newBadgeIds.push("quiz_chief");
+    }
+  }
+    
+  if (activityType === "flashcard_session") {
+    const flashcardCount = await FlashCardCompletion.countDocuments({ student: studentId });
+    if (flashcardCount >= 10 && !badgeIds.has("flashcard_master")) {
+      doc.badges = doc.badges || [];
+      doc.badges.push({ id: "flashcard_master", earnedAt: new Date() });
+      badgeIds.add("flashcard_master");
+      newBadgeIds.push("flashcard_master");
+    }
+  }
+
+    if (activityType === "lesson_complete") {
+      const fullyCompletedCourses =
+        await countFullyCompletedCoursesForStudent(studentId);
+      if (
+        fullyCompletedCourses >= 5 &&
+        !badgeIds.has("five_courses_complete")
+      ) {
+        doc.badges = doc.badges || [];
+        doc.badges.push({ id: "five_courses_complete", earnedAt: new Date() });
+        badgeIds.add("five_courses_complete");
+        newBadgeIds.push("five_courses_complete");
+      }
+    }
+
+    if (activityType === "lesson_complete") {
+      const fullyCompletedCourses =
+        await countFullyCompletedCoursesForStudent(studentId);
+      if (
+        fullyCompletedCourses >= 10 &&
+        !badgeIds.has("course_master")
+      ) {
+        doc.badges = doc.badges || [];
+        doc.badges.push({ id: "course_master", earnedAt: new Date() });
+        badgeIds.add("course_master");
+        newBadgeIds.push("course_master");
+      }
+    }
 
   if (activityType === "lesson_complete" && metadata?.courseId) {
     const lessonIds = await Lesson.find({ course: metadata.courseId, status: "ACTIVE" })
@@ -240,10 +357,19 @@ export async function recordStudentActivity(
   if (
     !doc.dailyChallenge.rewarded &&
     counts.ai_query >= DAILY_CHALLENGE_TARGET.ai_query
+    && counts.lesson_complete >= DAILY_CHALLENGE_TARGET.lesson_complete
+    && counts.quiz_complete >= DAILY_CHALLENGE_TARGET.quiz_complete
+    && counts.flashcard_session >= DAILY_CHALLENGE_TARGET.flashcard_session
   ) {
     doc.dailyChallenge.rewarded = true;
     doc.totalXp += DAILY_CHALLENGE_REWARD_XP;
     doc.level = getLevelFromXp(doc.totalXp);
+    // send notification to the student
+    sendFirebaseNotification(user.firebase_token, {
+      title: "Daily challenge complete!",
+      body: `You earned ${DAILY_CHALLENGE_REWARD_XP} XP.`,
+      data: { type: "gamification", event: "daily_challenge" },
+    });
   }
 
   const weekly = doc.weeklyChallenge;
@@ -270,12 +396,22 @@ export async function recordStudentActivity(
   const weeklyWasRewarded = Boolean(weekly?.rewarded);
   if (
     !doc.weeklyChallenge.rewarded &&
-    wCounts.lesson_complete >= WEEKLY_CHALLENGE_TARGET.lesson_complete
+    wCounts.ai_query >= WEEKLY_CHALLENGE_TARGET.ai_query
+    && wCounts.lesson_complete >= WEEKLY_CHALLENGE_TARGET.lesson_complete
+    && wCounts.quiz_complete >= WEEKLY_CHALLENGE_TARGET.quiz_complete
+    && wCounts.flashcard_session >= WEEKLY_CHALLENGE_TARGET.flashcard_session
   ) {
     doc.weeklyChallenge.rewarded = true;
     doc.totalXp += WEEKLY_CHALLENGE_REWARD_XP;
     doc.level = getLevelFromXp(doc.totalXp);
+    // send notification to the student
+    sendFirebaseNotification(user.firebase_token, {
+      title: "Weekly challenge complete!",
+      body: `You earned ${WEEKLY_CHALLENGE_REWARD_XP} XP.`,
+      data: { type: "gamification", event: "weekly_challenge" },
+    });
   }
+  
 
   doc.level = getLevelFromXp(doc.totalXp);
 
@@ -392,5 +528,13 @@ export async function getCourseProgressForStudent(
       completed: courseToCompleted.get(String(g._id)) || 0,
       total: g.total,
     }));
+}
+
+/** Courses where the student completed every ACTIVE lesson (same rules as getCourseProgressForStudent). */
+export async function countFullyCompletedCoursesForStudent(
+  studentId: string
+): Promise<number> {
+  const rows = await getCourseProgressForStudent(studentId);
+  return rows.filter((r) => r.total > 0 && r.completed >= r.total).length;
 }
 

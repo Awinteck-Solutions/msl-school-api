@@ -8,6 +8,9 @@ import {
   getTodayKey,
   formatDateInZone,
   normalizeTimeZone,
+  getXpRemainingToNextLevel,
+  getDailyChallengeExpectedCounts,
+  getWeeklyChallengeExpectedCounts,
 } from "../service/gamification.service";
 
 export class GamificationV2Controller {
@@ -50,17 +53,25 @@ export class GamificationV2Controller {
           : null);
       const streakAtRisk = lastDate !== null && lastDate !== today;
 
+      const totalXp = (doc as any).totalXp ?? 0;
+      const level =
+        (doc as any).level ?? getLevelFromXp(totalXp);
+      const nextLevelXp = getXpRemainingToNextLevel(totalXp);
+
       return res.status(200).json({
         success: true,
         message: "Gamification data retrieved.",
         response: {
           currentStreak: (doc as any).currentStreak ?? 0,
           longestStreak: (doc as any).longestStreak ?? 0,
-          totalXp: (doc as any).totalXp ?? 0,
-          level: (doc as any).level ?? getLevelFromXp((doc as any).totalXp ?? 0),
-          badges: (doc as any).badges ?? [],
+          totalXp,
+          level,
+          nextLevelXp,
           dailyChallenge: (doc as any).dailyChallenge ?? null,
+          dailyChallengeExpectedCounts: getDailyChallengeExpectedCounts(),
           weeklyChallenge: (doc as any).weeklyChallenge ?? null,
+          weeklyChallengeExpectedCounts: getWeeklyChallengeExpectedCounts(),
+          badges: (doc as any).badges ?? [],
           courseProgress,
           streakAtRisk,
         },

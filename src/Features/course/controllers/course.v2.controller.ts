@@ -12,18 +12,27 @@ type CourseLessonProgress = {
   percentage: number;
 };
 
+type LessonWithCompletionStatus = Record<string, unknown> & {
+  completedStatus: boolean;
+};
+
 export class CourseV2Controller {
-  private static async computeCourseProgressMap(
+  /**
+   * Active lessons linked to the given courses, ordered by link position then lesson position.
+   * Each item includes `completedStatus` for the student (false if student id missing/invalid).
+   */
+  private static async computeLessonsWithCompletionByCourse(
     courseIds: string[],
-    studentId: string
-  ): Promise<Record<string, CourseLessonProgress>> {
-    const progressMap: Record<string, CourseLessonProgress> = {};
-    if (
-      !courseIds.length ||
-      !studentId ||
-      !mongoose.Types.ObjectId.isValid(studentId)
-    ) {
-      return progressMap;
+    studentId: string | undefined
+  ): Promise<Record<string, LessonWithCompletionStatus[]>> {
+    const lessonsByCourse: Record<string, LessonWithCompletionStatus[]> = {};
+    const courseIdSet = new Set(courseIds);
+    courseIds.forEach((cid) => {
+      lessonsByCourse[cid] = [];
+    });
+
+    if (!courseIds.length) {
+      return lessonsByCourse;
     }
 
     const validObjectIds = courseIds
@@ -31,35 +40,25 @@ export class CourseV2Controller {
       .map((cid) => new mongoose.Types.ObjectId(cid));
 
     if (!validObjectIds.length) {
-      return progressMap;
+      return lessonsByCourse;
     }
 
-    const lessons = await Lesson.find(
-      {
-        status: "ACTIVE",
-        "linkedCourses.course": { $in: validObjectIds },
-      },
-      { linkedCourses: 1 }
-    ).lean();
+    const lessons = await Lesson.find({
+      status: "ACTIVE",
+      "linkedCourses.course": { $in: validObjectIds },
+    }).lean();
 
-    const courseLessonMap: Record<string, Set<string>> = {};
-    lessons.forEach((lesson: { _id: mongoose.Types.ObjectId; linkedCourses?: { course?: unknown }[] }) => {
-      lesson.linkedCourses?.forEach((lc) => {
-        const courseId = lc.course?.toString();
-        if (courseId) {
-          if (!courseLessonMap[courseId]) {
-            courseLessonMap[courseId] = new Set();
-          }
-          courseLessonMap[courseId].add(lesson._id.toString());
-        }
-      });
-    });
+    const lessonIds = lessons.map((l) => l._id);
+    const studentOk =
+      !!studentId && mongoose.Types.ObjectId.isValid(studentId);
 
-    const lessonIds = lessons.map((lesson) => lesson._id);
-    const completedLessons = await LessonProgress.find(
-      { student: studentId, lesson: { $in: lessonIds } },
-      { lesson: 1 }
-    ).lean();
+    const completedLessons =
+      studentOk && lessonIds.length
+        ? await LessonProgress.find(
+            { student: studentId, lesson: { $in: lessonIds } },
+            { lesson: 1 }
+          ).lean()
+        : [];
 
     const completedSet = new Set(
       completedLessons.map((p: { lesson: { toString: () => string } }) =>
@@ -67,29 +66,72 @@ export class CourseV2Controller {
       )
     );
 
-    Object.keys(courseLessonMap).forEach((courseId) => {
-      const lessonSet = courseLessonMap[courseId];
-      let completedCount = 0;
-      lessonSet.forEach((lessonId) => {
-        if (completedSet.has(lessonId)) {
-          completedCount += 1;
-        }
-      });
-
-      const totalLessons = lessonSet.size;
-      const percentage =
-        totalLessons > 0
-          ? Math.round((completedCount / totalLessons) * 100)
-          : 0;
-
-      progressMap[courseId] = {
-        completed: completedCount,
-        total: totalLessons,
-        percentage,
-      };
+    const pushedPerCourse: Record<string, Set<string>> = {};
+    courseIds.forEach((cid) => {
+      pushedPerCourse[cid] = new Set();
     });
 
-    return progressMap;
+    type LeanLesson = (typeof lessons)[number];
+    const rows: Record<
+      string,
+      (LessonWithCompletionStatus & { _sortPos: number })[]
+    > = {};
+    courseIds.forEach((cid) => {
+      rows[cid] = [];
+    });
+
+    lessons.forEach((lesson: LeanLesson) => {
+      const lessonIdStr = lesson._id.toString();
+      const completedStatus = completedSet.has(lessonIdStr);
+
+      lesson.linkedCourses?.forEach(
+        (lc: { course?: unknown; position?: number }) => {
+          const courseId = lc.course?.toString();
+          if (!courseId || !courseIdSet.has(courseId)) {
+            return;
+          }
+          if (pushedPerCourse[courseId].has(lessonIdStr)) {
+            return;
+          }
+          pushedPerCourse[courseId].add(lessonIdStr);
+
+          rows[courseId].push({
+            ...lesson,
+            completedStatus,
+            _sortPos: lc.position ?? 0,
+          } as LessonWithCompletionStatus & { _sortPos: number });
+        }
+      );
+    });
+
+    for (const cid of courseIds) {
+      const arr = rows[cid];
+      arr.sort((a, b) => {
+        if (a._sortPos !== b._sortPos) {
+          return a._sortPos - b._sortPos;
+        }
+        const ap = typeof a.position === "number" ? a.position : 0;
+        const bp = typeof b.position === "number" ? b.position : 0;
+        return ap - bp;
+      });
+      lessonsByCourse[cid] = arr.map(
+        ({ _sortPos, ...rest }) => rest as LessonWithCompletionStatus
+      );
+    }
+
+    return lessonsByCourse;
+  }
+
+  private static progressFromLessonsWithCompletion(
+    lessons: LessonWithCompletionStatus[]
+  ): CourseLessonProgress {
+    const total = lessons.length;
+    const completed = lessons.filter((l) => l.completedStatus).length;
+    return {
+      completed,
+      total,
+      percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
+    };
   }
 
   static async singleV2(req: Request, res: Response) {
@@ -98,26 +140,6 @@ export class CourseV2Controller {
 
       const result = await Course.aggregate([
         { $match: { _id: new mongoose.Types.ObjectId(id as string) } },
-        {
-          $lookup: {
-            from: "lessons",
-            let: { courseId: "$_id" },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $in: [
-                      "$$courseId",
-                      { $ifNull: ["$linkedCourses.course", []] },
-                    ],
-                  },
-                },
-              },
-              { $match: { status: "ACTIVE" } },
-            ],
-            as: "lessons",
-          },
-        },
         {
           $lookup: {
             from: "categories",
@@ -141,7 +163,6 @@ export class CourseV2Controller {
             author: 1,
             createdAt: 1,
             updatedAt: 1,
-            lessons: 1,
           },
         },
       ]);
@@ -155,27 +176,23 @@ export class CourseV2Controller {
 
       const course = result[0] as { _id: mongoose.Types.ObjectId };
       const studentId = (req["currentUser"] as { id?: string } | undefined)?.id;
-      const defaultProgress: CourseLessonProgress = {
-        completed: 0,
-        total: 0,
-        percentage: 0,
-      };
+      const courseIdStr = course._id.toString();
 
-      let progress = defaultProgress;
-      if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
-        const courseIdStr = course._id.toString();
-        const progressMap = await CourseV2Controller.computeCourseProgressMap(
+      const lessonsByCourse =
+        await CourseV2Controller.computeLessonsWithCompletionByCourse(
           [courseIdStr],
           studentId
         );
-        progress = progressMap[courseIdStr] ?? defaultProgress;
-      }
+      const lessonsList = lessonsByCourse[courseIdStr] ?? [];
+      const progress =
+        CourseV2Controller.progressFromLessonsWithCompletion(lessonsList);
 
       return res.status(200).json({
         status: true,
         message: "Course details success",
         response: {
           ...course,
+          lessons: lessonsList,
           progress,
         },
       });
@@ -246,14 +263,15 @@ export class CourseV2Controller {
       const paginatedCourses = uniqueCourses.slice(skip, skip + limit);
 
       const pagedCourseIds = paginatedCourses.map((course) => course._id);
+      const pagedCourseIdStrings = pagedCourseIds.map((c) => c._id.toString());
 
-      const progressMap =
-        pagedCourseIds.length > 0 && id && mongoose.Types.ObjectId.isValid(id)
-          ? await CourseV2Controller.computeCourseProgressMap(
-              pagedCourseIds.map((c) => c._id.toString()),
+      const lessonsByCourse =
+        pagedCourseIdStrings.length > 0
+          ? await CourseV2Controller.computeLessonsWithCompletionByCourse(
+              pagedCourseIdStrings,
               id
             )
-          : {};
+          : ({} as Record<string, LessonWithCompletionStatus[]>);
 
       return res.status(200).json({
         status: true,
@@ -270,13 +288,12 @@ export class CourseV2Controller {
           const courseId = course._id.toString();
           const baseCourse =
             typeof course.toObject === "function" ? course.toObject() : course;
+          const lessonsList = lessonsByCourse[courseId] ?? [];
           return {
             ...baseCourse,
-            progress: progressMap[courseId] || {
-              completed: 0,
-              total: 0,
-              percentage: 0,
-            },
+            progress:
+              CourseV2Controller.progressFromLessonsWithCompletion(lessonsList),
+            lessons: lessonsList,
           };
         }),
       });
