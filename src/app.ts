@@ -32,7 +32,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.get('/', (req: Request, res: Response) => { 
     res.json({
-        message: 'Welcome to MSL Business Version 2.0.0'
+        message: 'Welcome to MSL Business Version 2.0.1'
     })
 })
 
