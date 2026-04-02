@@ -41,12 +41,21 @@ import User from "../../user/schema/user.schema";
 import GlobalAiLimit from "../../mslAi/schema/globalAiLimit.schema";
 import AiUsage from "../../mslAi/schema/aiUsage.schema";
 import Lesson from "../../lesson/schema/lesson.schema";
+import Course from "../../course/schema/course.schema";
 import ProcessedLessonFile from "../schema/processedLessonFile.schema";
 
 interface MulterRequest extends Request {
   file?: multer.File;
   files?: multer.File[] | { [fieldname: string]: multer.File[] };
 }
+
+type PendingLessonFileRow = {
+  courseId: string;
+  lessonId: string;
+  fileKey: string;
+  fileType: "pdf" | "video";
+  url: string;
+};
 
 const STRICT_SYSTEM_PROMPT =
   "You are a helpful AI assistant trained on MSL learning materials. Answer the question strictly based on the provided context return response in HTML format. If the context does not contain the answer, respond with 'I do not have enough information from the MSL materials to answer that question.'";
@@ -407,6 +416,37 @@ export class AdminGeminiAiV2Controller {
     return out;
   }
 
+  /** Shared: collect pending lesson files for embedding for the given course ObjectIds. */
+  private static async preparePendingLessonFilesForCourses(
+    objectIds: mongoose.Types.ObjectId[]
+  ): Promise<{
+    courseIds: string[];
+    allFiles: PendingLessonFileRow[];
+    pending: PendingLessonFileRow[];
+  }> {
+    const courseIds = objectIds.map((id) => id.toString());
+    const allFiles = await AdminGeminiAiV2Controller.collectLessonFiles(objectIds);
+
+    const alreadyProcessed = await ProcessedLessonFile.find({ status: "SUCCESS" })
+      .select("lesson fileKey")
+      .lean();
+    const processedSet = new Set(
+      (alreadyProcessed as { lesson: mongoose.Types.ObjectId; fileKey: string }[]).map(
+        (r) => `${r.lesson}_${r.fileKey}`
+      )
+    );
+    const pendingRaw = allFiles.filter((f) => !processedSet.has(`${f.lessonId}_${f.fileKey}`));
+    const seen = new Set<string>();
+    const pending = pendingRaw.filter((f) => {
+      const key = `${f.lessonId}_${f.fileKey}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return { courseIds, allFiles, pending };
+  }
+
   /** Process course lessons for embedding: return 202 immediately and run job in background. */
   static async processCourseLessonsForEmbedding(req: Request, res: Response) {
     try {
@@ -428,37 +468,26 @@ export class AdminGeminiAiV2Controller {
       }
       const objectIds = validIds.map((id) => new mongoose.Types.ObjectId(id.trim()));
 
-      const allFiles = await AdminGeminiAiV2Controller.collectLessonFiles(objectIds);
+      const { courseIds: resolvedCourseIds, allFiles, pending } =
+        await AdminGeminiAiV2Controller.preparePendingLessonFilesForCourses(objectIds);
+
       if (allFiles.length === 0) {
         return res.status(200).json({
           success: true,
           message: "No lesson PDFs or videos found for the given courses.",
-          response: { courseIds: validIds, totalFilesToProcess: 0 },
+          response: { courseIds: resolvedCourseIds, totalFilesToProcess: 0 },
         });
       }
-
-      const alreadyProcessed = await ProcessedLessonFile.find({ status: "SUCCESS" })
-        .select("lesson fileKey")
-        .lean();
-      const processedSet = new Set(
-        (alreadyProcessed as { lesson: mongoose.Types.ObjectId; fileKey: string }[]).map(
-          (r) => `${r.lesson}_${r.fileKey}`
-        )
-      );
-      const pendingRaw = allFiles.filter((f) => !processedSet.has(`${f.lessonId}_${f.fileKey}`));
-      const seen = new Set<string>();
-      const pending = pendingRaw.filter((f) => {
-        const key = `${f.lessonId}_${f.fileKey}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
 
       if (pending.length === 0) {
         return res.status(200).json({
           success: true,
           message: "All lesson files for the given courses have already been processed.",
-          response: { courseIds: validIds, totalFilesToProcess: 0, totalSkipped: allFiles.length },
+          response: {
+            courseIds: resolvedCourseIds,
+            totalFilesToProcess: 0,
+            totalSkipped: allFiles.length,
+          },
         });
       }
 
@@ -466,7 +495,7 @@ export class AdminGeminiAiV2Controller {
         success: true,
         message: "Processing started. Lesson files are being processed in the background.",
         response: {
-          courseIds: validIds,
+          courseIds: resolvedCourseIds,
           totalFilesToProcess: pending.length,
           totalSkipped: allFiles.length - pending.length,
         },
@@ -481,6 +510,85 @@ export class AdminGeminiAiV2Controller {
       return res.status(500).json({
         success: false,
         message: "Error starting course-lessons processing",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Like processCourseLessonsForEmbedding but includes every course (any status: ACTIVE, DEACTIVE, AI-USE; includes archived).
+   * No body required. Returns 202 and runs the same background embedding job.
+   */
+  static async processAllCoursesLessonsForEmbedding(req: Request, res: Response) {
+    try {
+      const courses = await Course.find({})
+        .select("_id")
+        .lean();
+      const objectIds = (courses as { _id: mongoose.Types.ObjectId }[])
+        .map((c) => c._id)
+        .filter(Boolean);
+
+      if (objectIds.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "No courses found in the database.",
+          response: {
+            scope: "all_courses_any_status",
+            totalCourses: 0,
+            totalFilesToProcess: 0,
+          },
+        });
+      }
+
+      const { courseIds, allFiles, pending } =
+        await AdminGeminiAiV2Controller.preparePendingLessonFilesForCourses(objectIds);
+
+      if (allFiles.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "No lesson PDFs or videos found across all courses.",
+          response: {
+            scope: "all_courses_any_status",
+            totalCourses: courseIds.length,
+            totalFilesToProcess: 0,
+          },
+        });
+      }
+
+      if (pending.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "All lesson files for all courses have already been processed.",
+          response: {
+            scope: "all_courses_any_status",
+            totalCourses: courseIds.length,
+            totalFilesToProcess: 0,
+            totalSkipped: allFiles.length,
+          },
+        });
+      }
+
+      res.status(202).json({
+        success: true,
+        message:
+          "Processing started for all courses (any status). Lesson files are being processed in the background.",
+        response: {
+          scope: "all_courses_any_status",
+          totalCourses: courseIds.length,
+          totalFilesToProcess: pending.length,
+          totalSkipped: allFiles.length - pending.length,
+        },
+      });
+
+      setImmediate(() => {
+        AdminGeminiAiV2Controller.runProcessCourseLessonsBackground(pending).catch((e) => {
+          console.error("[processAllCoursesLessonsForEmbedding] Background error:", e);
+        });
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error starting all-courses lesson embedding",
         error: error.message,
       });
     }

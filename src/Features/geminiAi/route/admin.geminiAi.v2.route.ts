@@ -67,6 +67,15 @@ Router.post(
   }
 );
 
+Router.post(
+  "/process-all-courses-lessons-for-embedding",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.processAllCoursesLessonsForEmbedding(req, res);
+  }
+);
+
 // USE THIS
 Router.get(
   "/course-lessons-processing-status",
