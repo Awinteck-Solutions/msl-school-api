@@ -55,14 +55,14 @@ export const requireActiveCourseEnrollment = async (
 
     const count = counted[0]?.total ?? 0;
 
-    console.log('count', count)
     if (count < 1) {
+      const path = (req.originalUrl || req.url || "").split("?")[0];
+      const isGeminiHistory = path.includes("/gemini-ai/history");
+      if (isGeminiHistory) {
+        res.status(200).json({status: true, response: []});
+        return;
+      }
       res.status(200).send('You must be enrolled in at least one active course to use AI features.')
-      // res.status(403).json({
-      //   success: false,
-      //   message:
-      //     "You must be enrolled in at least one active course to use AI features.",
-      // });
       return;
     }
     next();

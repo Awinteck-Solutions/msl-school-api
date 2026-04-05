@@ -26,7 +26,7 @@ export async function verifyDeviceFromHeader(
 
   const deviceId = getHeaderDeviceId(req);
   if (!deviceId) {
-    res.status(401).json({
+    res.status(404).json({
       status: false,
       message: "x-device-id header is required",
     });

@@ -37,15 +37,15 @@ export const authentification = (
       }).catch(() => {});
     }
 
-    void verifyDeviceFromHeader(req, res, next).catch((err) => {
-      console.error("[authentification] verifyDeviceFromHeader failed", err);
-      if (!res.headersSent) {
-        res.status(500).json({
-          status: false,
-          message: "Could not verify device",
-        });
-      }
-    });
+    // void verifyDeviceFromHeader(req, res, next).catch((err) => {
+    //   console.error("[authentification] verifyDeviceFromHeader failed", err);
+    //   if (!res.headersSent) {
+    //     res.status(500).json({
+    //       status: false,
+    //       message: "Could not verify device",
+    //     });
+    //   }
+    // });
   } catch (error) {
     res.status(401).json({ message: "Unauthorized" });
   }
