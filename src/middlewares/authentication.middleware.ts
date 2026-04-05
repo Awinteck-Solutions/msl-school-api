@@ -3,21 +3,29 @@ import * as jwt from "jsonwebtoken";
 import * as dotenv from "dotenv";
 import { Roles } from "../enums/roles.enum";
 import { recordStudentActivity } from "../Features/gamification/service/gamification.service";
+import { verifyDeviceFromHeader } from "./verifyDeviceHeader.middleware";
 dotenv.config();
 
-export const authentification = (req: Request, res: Response, next: NextFunction): any => {
+export const authentification = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
   try {
     const header = req.headers.authorization;
     if (!header) {
-      return res.status(401).json({ message: "Unauthorized" });
+      res.status(401).json({ message: "Unauthorized" });
+      return;
     }
     const token = header.split(" ")[1];
     if (!token) {
-      return res.status(401).json({ message: "Unauthorized" });
+      res.status(401).json({ message: "Unauthorized" });
+      return;
     }
     const decode = jwt.verify(token, process.env.JWT_SECRET);
     if (!decode) {
-      return res.status(401).json({ message: "Unauthorized" });
+      res.status(401).json({ message: "Unauthorized" });
+      return;
     }
     req["currentUser"] = decode;
     const role = (decode as any)?.role;
@@ -28,8 +36,17 @@ export const authentification = (req: Request, res: Response, next: NextFunction
         timeZone: headerTimeZone,
       }).catch(() => {});
     }
+
+    void verifyDeviceFromHeader(req, res, next).catch((err) => {
+      console.error("[authentification] verifyDeviceFromHeader failed", err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          status: false,
+          message: "Could not verify device",
+        });
+      }
+    });
   } catch (error) {
-      return res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json({ message: "Unauthorized" });
   }
-  next();
 };

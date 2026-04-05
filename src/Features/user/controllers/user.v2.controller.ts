@@ -118,6 +118,7 @@ export class UserV2Controller {
             status: existing.status,
             timezone: existing.timezone,
             firebase_token: existing.firebase_token,
+            device_id: existing.device_id,
           });
 
           return res.status(200).json({
@@ -151,6 +152,7 @@ export class UserV2Controller {
           status: created.status,
           timezone: created.timezone,
           firebase_token: created.firebase_token,
+          device_id: created.device_id,
         });
 
         return res.status(200).json({
@@ -199,6 +201,7 @@ export class UserV2Controller {
           status: result.status,
           timezone: result.timezone,
           firebase_token: result.firebase_token,
+          device_id: result.device_id,
         });
 
         return res.status(200).json({

@@ -20,12 +20,17 @@ export class UserService {
         req.body && typeof req.body === "object" && !Array.isArray(req.body)
           ? (req.body as Record<string, unknown>)
           : ({} as Record<string, unknown>);
-      const { device_id } = body as { device_id?: string };
+      const headerRaw = req.headers["x-device-id"];
+      const fromHeader =
+        typeof headerRaw === "string" ? headerRaw.trim() : "";
+      const fromBody = (body as { device_id?: string }).device_id;
+      const device_id =
+        (typeof fromBody === "string" ? fromBody.trim() : "") || fromHeader;
 
       if (!device_id) {
         return res.status(401).json({
           status: false,
-          message: "device_id can't be empty",
+          message: "device_id can't be empty (body or x-device-id header)",
         });
       }
 
