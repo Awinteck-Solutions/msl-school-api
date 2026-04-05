@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import Requests from "../schema/request.schema";
 import { sendFirebaseNotification } from "../../../helpers/firebase";
 import User from "../../user/schema/user.schema";
+import Enrolled from "../../course/schema/enroll.schema";
 
 export class AdminRequestV2Controller {
   static async all(req: Request, res: Response) {
@@ -160,15 +161,24 @@ export class AdminRequestV2Controller {
           });
         }
         if (normalizedStatus === "ACTIVE") {
-            sendFirebaseNotification(firebaseToken, {
-              title: "Course Request Approved",
-              body: `Your request has been approved for ${course.title}`,
-              data: { type: "request", event: "request_approved", course: course._id.toString() },
-            });
+          sendFirebaseNotification(firebaseToken, {
+            title: "Course Request Approved",
+            body: `Your enrollment request has been approved for ${course.title}`,
+            data: { type: "request", event: "request_approved", course: course._id.toString() },
+          });
+          await Enrolled.findOneAndUpdate(
+            { email: result.email, course: course._id },
+            {
+              $set: { status: "ACTIVE" },
+              $setOnInsert: { email: result.email, course: course._id },
+            },
+            { upsert: true, new: true }
+          );
         }
+
         return res.status(201).json({
           status: true,
-          message: "request success",
+          message: "request approved and enrolled"
         });
       })
       .catch((error) => {

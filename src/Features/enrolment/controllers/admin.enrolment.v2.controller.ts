@@ -215,35 +215,56 @@ export class AdminEnrolmentV2Controller {
   }
 
   static async addMany(req: Request, res: Response) {
-    const { emails, courseId } = req.body;
-    if (!emails || !courseId) {
-      return res.status(400).json({
-        error: "Missing fields",
-      });
-    }
+    try {
+      const { emails, courseId } = req.body;
+      if (!emails || !courseId || !Array.isArray(emails) || emails.length === 0) {
+        return res.status(400).json({
+          error: "Missing fields",
+        });
+      }
 
-    const enrolled = [
-      ...emails.map((email: string) => ({
+      const enrolled = emails.map((email: string) => ({
         email,
         course: courseId,
-      })),
-    ];
+      }));
 
-    Enrolled.insertMany(enrolled)
-      .then((result) => {
-        return res.status(201).json({
-          status: true,
-          message: "New user enrolled added",
-          response: result,
-        });
-      })
-      .catch((error) => {
-        return res.status(404).json({
-          status: false,
-          message: "User enrolling failed",
-          other: error,
-        });
+      const result = await Enrolled.insertMany(enrolled);
+
+      const course = (await Course.findById(courseId).select("title").lean()) as {
+        title?: string;
+      } | null;
+      const courseTitle = course?.title ?? "a course";
+
+      const students = await User.find({ email: { $in: emails } })
+        .select("firebase_token")
+        .lean();
+
+      for (const student of students as { firebase_token?: string }[]) {
+        const firebaseToken = student?.firebase_token;
+        if (!firebaseToken) continue;
+        sendFirebaseNotification(firebaseToken, {
+          title: "You have been enrolled to a course",
+          body: `You have been enrolled to a course ${courseTitle}`,
+          data: {
+            type: "enrolment",
+            event: "enrolment_added",
+            course: courseId.toString(),
+          },
+        }).catch(() => {});
+      }
+
+      return res.status(201).json({
+        status: true,
+        message: "New user enrolled added",
+        response: result,
       });
+    } catch (error) {
+      return res.status(404).json({
+        status: false,
+        message: "User enrolling failed",
+        other: error,
+      });
+    }
   }
 
   static async addCsv(req: MulterRequest, res: Response) {
@@ -413,6 +434,8 @@ export class AdminEnrolmentV2Controller {
     try {
       const { email, courseIds } = req.body;
 
+      console.log('courseIds', courseIds)
+
       if (!email || !courseIds || !Array.isArray(courseIds)) {
         return res.status(400).json({
           status: false,
@@ -427,6 +450,24 @@ export class AdminEnrolmentV2Controller {
 
       const result = await Enrolled.insertMany(enrollments);
 
+      const student = await User.findOne({ email: email }).select("firebase_token").lean();
+      const firebaseToken = (student as any)?.firebase_token as string | undefined;
+
+      for (const courseId of courseIds) {
+        const course = await Course.findById(courseId).select("title").lean() as any;
+        if (!course) continue;
+        if (!firebaseToken) {
+          return res.status(404).json({
+            status: false,
+            message: "Student not found",
+          });
+        } 
+        sendFirebaseNotification(firebaseToken, {
+          title: "You have been enrolled to a course",
+          body: `You have been enrolled to a course ${course.title}`,
+          data: { type: "enrolment", event: "enrolment_added", course: courseId.toString() },
+        });
+      }
       return res.status(201).json({
         status: true,
         message: "User successfully enrolled in multiple courses",
