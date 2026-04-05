@@ -65,14 +65,14 @@ export class AdminEnrolmentV2Controller {
         if (!firebaseToken) {
           return res.status(404).json({
             status: false,
-            message: "Student not found",
+            message: "Student firebase token not found",
           });
         }
-            sendFirebaseNotification(firebaseToken, {
-              title: "You have been enrolled to a course",
-              body: `You have been enrolled to a course ${course.title}`,
-              data: { type: "enrolment", event: "enrolment_added", course: courseId.toString() },
-            });
+          sendFirebaseNotification(firebaseToken, {
+            title: "You have been enrolled to a course",
+            body: `You have been enrolled to a course ${course.title}`,
+            data: { type: "enrolment", event: "enrolment_added", course: courseId.toString() },
+          });
        
         return res.status(201).json({
           status: true,

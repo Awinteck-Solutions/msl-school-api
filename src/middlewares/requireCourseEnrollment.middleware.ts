@@ -3,8 +3,9 @@ import Enrolled from "../Features/course/schema/enroll.schema";
 import { Roles } from "../enums/roles.enum";
 
 /**
- * After auth: students (USER) must have at least one ACTIVE course enrollment.
- * ADMIN bypasses (staff tooling / testing).
+ * After auth: students must have at least one enrollment where both the
+ * enrollment and the linked course are ACTIVE (course not archived).
+ * ADMIN / AUDITOR bypass.
  */
 export const requireActiveCourseEnrollment = async (
   req: Request,
@@ -12,7 +13,6 @@ export const requireActiveCourseEnrollment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    console.log('requireActiveCourseEnrollment')
     const user = req["currentUser"] as
       | { role?: string; email?: string }
       | undefined;
@@ -32,15 +32,29 @@ export const requireActiveCourseEnrollment = async (
       });
       return;
     }
-    console.log('email', email)
-    const enrolled = await Enrolled.find({ email, status: "ACTIVE" }).populate("course").lean();
-    console.log('enrolled', enrolled)
-   
-    
-    const count = await Enrolled.countDocuments({
-      email,
-      status: "ACTIVE",
-    });
+
+    const counted = (await Enrolled.aggregate([
+      { $match: { email, status: "ACTIVE" } },
+      {
+        $lookup: {
+          from: "courses",
+          localField: "course",
+          foreignField: "_id",
+          as: "courseDoc",
+        },
+      },
+      { $unwind: "$courseDoc" },
+      {
+        $match: {
+          "courseDoc.status": "ACTIVE",
+          "courseDoc.archived": { $ne: true },
+        },
+      },
+      { $count: "total" },
+    ])) as { total?: number }[];
+
+    const count = counted[0]?.total ?? 0;
+
     console.log('count', count)
     if (count < 1) {
       res.status(403).json({
@@ -50,8 +64,6 @@ export const requireActiveCourseEnrollment = async (
       });
       return;
     }
-
-    
     next();
   } catch {
     res.status(500).json({
