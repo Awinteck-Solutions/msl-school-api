@@ -20,7 +20,7 @@ export const requireActiveCourseEnrollment = async (
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
-    if (user.role === Roles.AUDITOR) {
+    if ([Roles.ADMIN, Roles.AUDITOR, Roles.STAFF_JUNIOR, Roles.STAFF_SENIOR].includes(user.role as Roles)) {
       next();
       return;
     }
