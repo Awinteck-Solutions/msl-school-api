@@ -57,11 +57,12 @@ export const requireActiveCourseEnrollment = async (
 
     console.log('count', count)
     if (count < 1) {
-      res.status(403).json({
-        success: false,
-        message:
-          "You must be enrolled in at least one active course to use AI features.",
-      });
+      res.status(200).send('You must be enrolled in at least one active course to use AI features.')
+      // res.status(403).json({
+      //   success: false,
+      //   message:
+      //     "You must be enrolled in at least one active course to use AI features.",
+      // });
       return;
     }
     next();
