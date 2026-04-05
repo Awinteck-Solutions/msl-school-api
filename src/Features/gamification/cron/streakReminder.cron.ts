@@ -22,51 +22,58 @@ const getYesterdayKey = (timeZone: string) => {
 export const startStreakReminderCron = (
   options: StreakReminderOptions = {}
 ) => {
-  const cronExpression = options.cronExpression || "0 * * * *";
+  // Every minute on the minute, UTC; override via options.cronExpression
+  const cronExpression = options.cronExpression || "* * * * *";
 
-  cron.schedule(cronExpression, async () => {
-    try {
-      const candidates = await StudentGamification.find({
-        currentStreak: { $gt: 0 },
-      }).lean();
+  cron.schedule(
+    cronExpression,
+    async () => {
+      try {
+        const candidates = await StudentGamification.find({
+          currentStreak: { $gt: 0 },
+        }).lean();
 
-      for (const doc of candidates as any[]) {
-        const user = await User.findById(doc.student)
-          .select("firebase_token timezone")
-          .lean();
-        const firebaseToken = (user as any)?.firebase_token as
-          | string
-          | undefined;
-        if (!firebaseToken) continue;
+        for (const doc of candidates as any[]) {
+          const user = await User.findById(doc.student)
+            .select("firebase_token timezone")
+            .lean();
+          const firebaseToken = (user as any)?.firebase_token as
+            | string
+            | undefined;
+          if (!firebaseToken) continue;
 
-        const timeZone = normalizeTimeZone((user as any)?.timezone);
-        const todayKey = getTodayKey(timeZone);
-        const yesterdayKey = getYesterdayKey(timeZone);
-        const lastActiveKey =
-          doc.lastActiveDateKey ||
-          (doc.lastActiveDate
-            ? formatDateInZone(new Date(doc.lastActiveDate), timeZone)
-            : null);
+          console.log('CRON RUNNING FOR USER', user?.email)
 
-        if (lastActiveKey !== yesterdayKey) continue;
-        if (doc.streakReminderDateKey === todayKey) continue;
+          const timeZone = normalizeTimeZone((user as any)?.timezone);
+          const todayKey = getTodayKey(timeZone);
+          const yesterdayKey = getYesterdayKey(timeZone);
+          const lastActiveKey =
+            doc.lastActiveDateKey ||
+            (doc.lastActiveDate
+              ? formatDateInZone(new Date(doc.lastActiveDate), timeZone)
+              : null);
 
-        await sendFirebaseNotification(firebaseToken, {
-          title: "Keep your streak alive!",
-          body: "You’re about to lose your streak. Open the app today.",
-          data: {
-            type: "gamification",
-            event: "streak_reminder",
-          },
-        });
-        
-        await StudentGamification.updateOne(
-          { _id: doc._id },
-          { $set: { streakReminderDateKey: todayKey } }
-        );
+          if (lastActiveKey !== yesterdayKey) continue;
+          if (doc.streakReminderDateKey === todayKey) continue;
+
+          await sendFirebaseNotification(firebaseToken, {
+            title: "Keep your streak alive!",
+            body: "You’re about to lose your streak. Open the app today.",
+            data: {
+              type: "gamification",
+              event: "streak_reminder",
+            },
+          });
+
+          await StudentGamification.updateOne(
+            { _id: doc._id },
+            { $set: { streakReminderDateKey: todayKey } }
+          );
+        }
+      } catch (error) {
+        console.error("[gamification] streak reminder cron failed", error);
       }
-    } catch (error) {
-      console.error("[gamification] streak reminder cron failed", error);
-    }
-  });
+    },
+    { timezone: "Etc/UTC" }
+  );
 };

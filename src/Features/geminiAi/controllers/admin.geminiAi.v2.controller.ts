@@ -423,9 +423,13 @@ export class AdminGeminiAiV2Controller {
     courseIds: string[];
     allFiles: PendingLessonFileRow[];
     pending: PendingLessonFileRow[];
+    totalFiles: number;
+    totalProcessedFiles: number;
   }> {
     const courseIds = objectIds.map((id) => id.toString());
     const allFiles = await AdminGeminiAiV2Controller.collectLessonFiles(objectIds);
+    console.log('allFiles', allFiles)
+    
 
     const alreadyProcessed = await ProcessedLessonFile.find({ status: "SUCCESS" })
       .select("lesson fileKey")
@@ -444,7 +448,7 @@ export class AdminGeminiAiV2Controller {
       return true;
     });
 
-    return { courseIds, allFiles, pending };
+    return { courseIds, allFiles, pending , totalFiles: allFiles.length, totalProcessedFiles: alreadyProcessed.length };
   }
 
   /** Process course lessons for embedding: return 202 immediately and run job in background. */
@@ -468,14 +472,14 @@ export class AdminGeminiAiV2Controller {
       }
       const objectIds = validIds.map((id) => new mongoose.Types.ObjectId(id.trim()));
 
-      const { courseIds: resolvedCourseIds, allFiles, pending } =
+      const { courseIds: resolvedCourseIds, allFiles, pending, totalFiles } =
         await AdminGeminiAiV2Controller.preparePendingLessonFilesForCourses(objectIds);
 
       if (allFiles.length === 0) {
         return res.status(200).json({
           success: true,
           message: "No lesson PDFs or videos found for the given courses.",
-          response: { courseIds: resolvedCourseIds, totalFilesToProcess: 0 },
+          response: { courseIds: resolvedCourseIds, totalFilesToProcess: 0, totalFiles },
         });
       }
 
@@ -487,6 +491,7 @@ export class AdminGeminiAiV2Controller {
             courseIds: resolvedCourseIds,
             totalFilesToProcess: 0,
             totalSkipped: allFiles.length,
+            totalFiles,
           },
         });
       }
@@ -498,6 +503,7 @@ export class AdminGeminiAiV2Controller {
           courseIds: resolvedCourseIds,
           totalFilesToProcess: pending.length,
           totalSkipped: allFiles.length - pending.length,
+          totalFiles,
         },
       });
 
@@ -540,7 +546,7 @@ export class AdminGeminiAiV2Controller {
         });
       }
 
-      const { courseIds, allFiles, pending } =
+      const { courseIds, allFiles, pending, totalFiles, totalProcessedFiles } =
         await AdminGeminiAiV2Controller.preparePendingLessonFilesForCourses(objectIds);
 
       if (allFiles.length === 0) {
@@ -551,6 +557,8 @@ export class AdminGeminiAiV2Controller {
             scope: "all_courses_any_status",
             totalCourses: courseIds.length,
             totalFilesToProcess: 0,
+            totalFiles,
+            totalProcessedFiles,
           },
         });
       }
@@ -564,7 +572,9 @@ export class AdminGeminiAiV2Controller {
             totalCourses: courseIds.length,
             totalFilesToProcess: 0,
             totalSkipped: allFiles.length,
-          },
+            totalFiles,
+            totalProcessedFiles,
+            },
         });
       }
 
@@ -577,6 +587,8 @@ export class AdminGeminiAiV2Controller {
           totalCourses: courseIds.length,
           totalFilesToProcess: pending.length,
           totalSkipped: allFiles.length - pending.length,
+          totalFiles,
+          totalProcessedFiles,
         },
       });
 

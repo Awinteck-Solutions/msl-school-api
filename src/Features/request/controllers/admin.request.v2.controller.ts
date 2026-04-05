@@ -153,19 +153,9 @@ export class AdminRequestV2Controller {
         // get the student's firebase token
         const student = await User.findOne({ email: result.email }).select("firebase_token").lean();
         const firebaseToken = (student as any)?.firebase_token as string | undefined;
-        // console.log('student', student)
-        if (!firebaseToken) {
-          return res.status(404).json({
-            status: false,
-            message: "Student not found",
-          });
-        }
+        console.log('student', result.email)
+       
         if (normalizedStatus === "ACTIVE") {
-          sendFirebaseNotification(firebaseToken, {
-            title: "Course Request Approved",
-            body: `Your enrollment request has been approved for ${course.title}`,
-            data: { type: "request", event: "request_approved", course: course._id.toString() },
-          });
           await Enrolled.findOneAndUpdate(
             { email: result.email, course: course._id },
             {
@@ -174,8 +164,20 @@ export class AdminRequestV2Controller {
             },
             { upsert: true, new: true }
           );
-        }
 
+          if (!firebaseToken) {
+            return res.status(200).json({
+              status: false,
+              message: "Request approved but Student firebase token not found",
+            });
+          }
+          sendFirebaseNotification(firebaseToken, {
+            title: "Course Request Approved",
+            body: `Your enrollment request has been approved for ${course.title}`,
+            data: { type: "request", event: "request_approved", course: course._id.toString() },
+          });
+
+        }
         return res.status(201).json({
           status: true,
           message: "request approved and enrolled"
