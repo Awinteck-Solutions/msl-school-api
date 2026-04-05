@@ -43,7 +43,7 @@ export async function verifyDeviceFromHeader(
       .lean();
      
     if (!result) {
-      res.status(404).json({
+      res.status(403).json({
         status: false,
         message: "You've been logged out",
       });
