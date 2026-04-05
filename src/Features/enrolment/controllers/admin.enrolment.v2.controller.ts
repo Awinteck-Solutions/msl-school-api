@@ -4,6 +4,9 @@ import { Readable } from "stream";
 import csvParser = require("csv-parser");
 import Enrolled from "../../course/schema/enroll.schema";
 import multer from "multer";
+import { sendFirebaseNotification } from "../../../helpers/firebase";
+import User from "../../user/schema/user.schema";
+import Course from "../../course/schema/course.schema";
 type CsvRow = Record<string, string>;
 
 interface MulterRequest extends Request {
@@ -53,7 +56,24 @@ export class AdminEnrolmentV2Controller {
     });
     enrolled
       .save()
-      .then((result) => {
+      .then(async (result) => {
+        // get course title
+        const course = await Course.findById(courseId).select("title").lean() as any;
+        const student = await User.findOne({ email: email }).select("firebase_token").lean();
+        const firebaseToken = (student as any)?.firebase_token as string | undefined;
+        // console.log('student', student)
+        if (!firebaseToken) {
+          return res.status(404).json({
+            status: false,
+            message: "Student not found",
+          });
+        }
+            sendFirebaseNotification(firebaseToken, {
+              title: "You have been enrolled to a course",
+              body: `You have been enrolled to a course ${course.title}`,
+              data: { type: "enrolment", event: "enrolment_added", course: courseId.toString() },
+            });
+       
         return res.status(201).json({
           status: true,
           message: "New user enrolled added",

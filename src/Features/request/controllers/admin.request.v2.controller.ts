@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import Requests from "../schema/request.schema";
 import { sendFirebaseNotification } from "../../../helpers/firebase";
+import User from "../../user/schema/user.schema";
 
 export class AdminRequestV2Controller {
   static async all(req: Request, res: Response) {
@@ -145,14 +146,21 @@ export class AdminRequestV2Controller {
       });
     }
     Requests.findOneAndUpdate({ _id: id }, { status: normalizedStatus }, { upsert: false }).populate("course")
-      .then((result: any) => {
+      .then(async (result: any) => {
         const course = result.course;
-        console.log("course::", course.title);
-        const firebaseToken = (req["currentUser"] as any).firebase_token;
-        console.log("firebaseToken::", firebaseToken);
-        console.log("email::", (req["currentUser"] as any).email);
+        // console.log("course::", course.title);
+        // get the student's firebase token
+        const student = await User.findOne({ email: result.email }).select("firebase_token").lean();
+        const firebaseToken = (student as any)?.firebase_token as string | undefined;
+        // console.log('student', student)
+        if (!firebaseToken) {
+          return res.status(404).json({
+            status: false,
+            message: "Student not found",
+          });
+        }
         if (normalizedStatus === "ACTIVE") {
-            sendFirebaseNotification((req["currentUser"] as any).firebase_token, {
+            sendFirebaseNotification(firebaseToken, {
               title: "Course Request Approved",
               body: `Your request has been approved for ${course.title}`,
               data: { type: "request", event: "request_approved", course: course._id.toString() },
@@ -163,7 +171,8 @@ export class AdminRequestV2Controller {
           message: "request success",
         });
       })
-      .catch(() => {
+      .catch((error) => {
+        console.log("error::", error);
         return res.status(404).json({
           status: false,
           message: "Request failed",
