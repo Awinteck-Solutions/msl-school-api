@@ -22,8 +22,8 @@ const getYesterdayKey = (timeZone: string) => {
 export const startStreakReminderCron = (
   options: StreakReminderOptions = {}
 ) => {
-  // Every minute on the minute, UTC; override via options.cronExpression
-  const cronExpression = options.cronExpression || "* * * * *";
+  // Default 17:30 UTC daily; override via options.cronExpression / STREAK_REMINDER_CRON
+  const cronExpression = options.cronExpression || "00 18 * * *";
 
   cron.schedule(
     cronExpression,
@@ -35,7 +35,7 @@ export const startStreakReminderCron = (
 
         for (const doc of candidates as any[]) {
           const user = await User.findById(doc.student)
-            .select("firebase_token timezone")
+            .select("firebase_token timezone email")
             .lean();
           const firebaseToken = (user as any)?.firebase_token as
             | string
