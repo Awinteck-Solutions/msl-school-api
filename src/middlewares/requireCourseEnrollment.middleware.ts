@@ -33,6 +33,10 @@ export const requireActiveCourseEnrollment = async (
       return;
     }
     console.log('email', email)
+    const enrolled = await Enrolled.find({ email, status: "ACTIVE" }).populate("course").lean();
+    console.log('enrolled', enrolled)
+   
+    
     const count = await Enrolled.countDocuments({
       email,
       status: "ACTIVE",

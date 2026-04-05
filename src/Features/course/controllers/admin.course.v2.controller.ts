@@ -695,14 +695,15 @@ export class AdminCourseV2Controller {
             message: "Enrolled all User",
             result: result
               .filter((value) => {
-                if (value.course === undefined) return false;
-                if (value.course.status === "ACTIVE") return true;
+                if (value?.course === undefined) return false;
+                if (value?.course?.status === "ACTIVE") return true;
                 return false;
               })
               .map((value) => value.course),
           });
         })
-        .catch(() => {
+        .catch((error) => {
+          console.log('error', error)
           return res.status(404).json({
             status: false,
             message: "Enrolled users failed",

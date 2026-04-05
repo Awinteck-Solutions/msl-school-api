@@ -36,7 +36,7 @@ Router.get(
   "/by-student-email/:email",
   authentification,
   authorization([Roles.ADMIN]),
-  cacheMiddleware({ ttlSeconds: CacheTtl.TWO_MINUTES, keyPrefix: "admin:course:user" }),
+  // cacheMiddleware({ ttlSeconds: CacheTtl.TWO_MINUTES, keyPrefix: "admin:course:user" }),
   (req: Request, res: Response) => {
     AdminCourseV2Controller.userCourses(req, res);
   }

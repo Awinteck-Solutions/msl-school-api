@@ -34,6 +34,7 @@ const aiUsageSchema = new Schema(
     total_tokens: { type: Number },
     model: { type: String },
     cost_estimate_usd: { type: Number },
+    metadata: { type: Object },
   },
   { timestamps: true }
 );

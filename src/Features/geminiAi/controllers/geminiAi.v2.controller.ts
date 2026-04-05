@@ -3185,6 +3185,11 @@ export class GeminiAiV2Controller {
         model: GEMINI_CHAT_MODEL,
         cost_estimate_usd: 0,
         queryType: "chat",
+        metadata: {
+          imageMimeType: file.mimetype,
+          imageBase64: file.buffer.toString("base64"),
+          type: "image",
+        },
       });
       await aiUsage.save();
 

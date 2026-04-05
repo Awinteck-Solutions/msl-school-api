@@ -167,7 +167,7 @@ export class AdminRequestV2Controller {
 
           if (!firebaseToken) {
             return res.status(200).json({
-              status: false,
+              status: true,
               message: "Request approved but Student firebase token not found",
             });
           }
