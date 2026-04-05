@@ -26,15 +26,7 @@ Router.post(
   }
 );
 
-Router.delete(
-  "/:id",
-  authentification,
-  authorization([Roles.ADMIN]),
-  cacheInvalidation(["enrolment"]),
-  (req: Request, res: Response) => {
-    AdminEnrolmentV2Controller.deleteOne(req, res);
-  }
-);
+
 
 Router.delete(
   "/delete-many",
@@ -140,6 +132,16 @@ Router.delete(
   cacheInvalidation(["enrolment"]),
   (req: Request, res: Response) => {
     AdminEnrolmentV2Controller.unenrollUserFromManyCourses(req, res);
+  }
+);
+
+Router.delete(
+  "/:id",
+  authentification,
+  authorization([Roles.ADMIN]),
+  cacheInvalidation(["enrolment"]),
+  (req: Request, res: Response) => {
+    AdminEnrolmentV2Controller.deleteOne(req, res);
   }
 );
 

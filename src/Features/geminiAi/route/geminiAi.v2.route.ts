@@ -4,10 +4,17 @@ import rateLimit from "express-rate-limit";
 import multer = require("multer");
 import { authentification } from "../../../middlewares/authentication.middleware";
 import { authorization } from "../../../middlewares/authorization.middleware";
+import { requireActiveCourseEnrollment } from "../../../middlewares/requireCourseEnrollment.middleware";
 import { Roles } from "../../../enums/roles.enum";
 import { GeminiAiV2Controller } from "../controllers/geminiAi.v2.controller";
 
 const Router = express.Router();
+
+Router.use(
+  authentification,
+  authorization([Roles.USER, Roles.ADMIN]),
+  requireActiveCourseEnrollment
+);
 
 const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -50,63 +57,34 @@ const rawAudio = express.raw({
 
 Router.post(
   "/query-general-stream",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.queryGeneralStream(req, res);
   }
 );
 
-Router.get(
-  "/history",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
-  (req: Request, res: Response) => {
-    GeminiAiV2Controller.history(req, res);
-  }
-);
+Router.get("/history", (req: Request, res: Response) => {
+  GeminiAiV2Controller.history(req, res);
+});
 
-Router.get(
-  "/recent-activity",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
-  (req: Request, res: Response) => {
-    GeminiAiV2Controller.nonChatHistory(req, res);
-  }
-);
+Router.get("/recent-activity", (req: Request, res: Response) => {
+  GeminiAiV2Controller.nonChatHistory(req, res);
+});
 
-Router.get(
-  "/summaries",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
-  (req: Request, res: Response) => {
-    GeminiAiV2Controller.summarizeHistory(req, res);
-  }
-);
+Router.get("/summaries", (req: Request, res: Response) => {
+  GeminiAiV2Controller.summarizeHistory(req, res);
+});
 
-Router.get(
-  "/flashcards",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
-  (req: Request, res: Response) => {
-    GeminiAiV2Controller.flashcardHistory(req, res);
-  }
-);
+Router.get("/flashcards", (req: Request, res: Response) => {
+  GeminiAiV2Controller.flashcardHistory(req, res);
+});
 
-Router.get(
-  "/quizzes",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
-  (req: Request, res: Response) => {
-    GeminiAiV2Controller.quizHistory(req, res);
-  }
-);
+Router.get("/quizzes", (req: Request, res: Response) => {
+  GeminiAiV2Controller.quizHistory(req, res);
+});
 
 Router.post(
   "/query-general",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.queryGeneral(req, res);
@@ -115,8 +93,6 @@ Router.post(
 
 Router.post(
   "/query-general-context",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.queryGeneralWithContext(req, res);
@@ -125,19 +101,15 @@ Router.post(
 
 Router.post(
   "/query-general-context-stream",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.queryGeneralWithContextStream(req, res);
   }
 );
 
- // returns chunks of text and then uses the fulltext to create audio chunks
+// returns chunks of text and then uses the fulltext to create audio chunks
 Router.post(
   "/query-general-context-audio-stream",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.queryGeneralWithContextAudioStream(req, res);
@@ -146,8 +118,6 @@ Router.post(
 
 Router.post(
   "/query-general-context-audio-binary",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.queryGeneralWithContextAudioBinary(req, res);
@@ -156,8 +126,6 @@ Router.post(
 
 Router.post(
   "/query-general-context-audio-dual-stream",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.queryGeneralWithContextAudioDualStream(req, res);
@@ -167,8 +135,6 @@ Router.post(
 // returns chunks of text and asynchronously uses it to create audio chunks
 Router.post(
   "/query-general-context-audio-text-stream",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.queryGeneralWithContextAudioTextStream(req, res);
@@ -177,8 +143,6 @@ Router.post(
 
 Router.post(
   "/query-general-context-text-stream-final-audio",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.queryGeneralWithContextTextStreamFinalAudio(req, res);
@@ -187,8 +151,6 @@ Router.post(
 
 Router.post(
   "/query-image",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   uploadImage.single("image"),
   (req: Request, res: Response) => {
@@ -198,8 +160,6 @@ Router.post(
 
 Router.post(
   "/voice-to-text-stream",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   upload.single("audio"),
   (req: Request, res: Response) => {
@@ -209,8 +169,6 @@ Router.post(
 
 Router.post(
   "/voice-to-text-raw-stream",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   rawAudio,
   (req: Request, res: Response) => {
@@ -220,8 +178,6 @@ Router.post(
 
 Router.post(
   "/voice-to-text",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   upload.single("audio"),
   (req: Request, res: Response) => {
@@ -231,8 +187,6 @@ Router.post(
 
 Router.post(
   "/voice-to-text-raw",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   rawAudio,
   (req: Request, res: Response) => {
@@ -242,8 +196,6 @@ Router.post(
 
 Router.post(
   "/summarize",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.summarize(req, res);
@@ -252,8 +204,6 @@ Router.post(
 
 Router.post(
   "/generate-flashcards",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.generateFlashcards(req, res);
@@ -262,8 +212,6 @@ Router.post(
 
 Router.post(
   "/generate-quiz",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   chatLimiter,
   (req: Request, res: Response) => {
     GeminiAiV2Controller.generateQuiz(req, res);

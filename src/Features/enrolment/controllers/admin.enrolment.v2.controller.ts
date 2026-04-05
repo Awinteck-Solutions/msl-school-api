@@ -107,7 +107,7 @@ export class AdminEnrolmentV2Controller {
       .catch((error) => {
         return res.status(404).json({
           status: false,
-          message: "Enrolled user deleting failed",
+          message: "Enrolled user deleting failed - deleteOne",
           other: error,
         });
       });
