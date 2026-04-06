@@ -129,6 +129,30 @@ function ensureChallengeCounts(c: any): Record<string, number> {
   };
 }
 
+/** Avoid E11000 when concurrent callers both see no row and try to insert. */
+async function getOrCreateStudentGamificationDoc(studentId: string) {
+  const existing = await StudentGamification.findOne({ student: studentId });
+  if (existing) return existing;
+  try {
+    return await StudentGamification.create({
+      student: studentId,
+      lastActiveDateKey: null,
+      lastActiveDate: null,
+      currentStreak: 0,
+      longestStreak: 0,
+      totalXp: 0,
+      level: 1,
+      badges: [],
+    });
+  } catch (err: any) {
+    if (err?.code === 11000) {
+      const doc = await StudentGamification.findOne({ student: studentId });
+      if (doc) return doc;
+    }
+    throw err;
+  }
+}
+
 export async function recordStudentActivity(
   studentId: string,
   activityType: ActivityType,
@@ -143,19 +167,7 @@ export async function recordStudentActivity(
   const today = getTodayKey(timeZone);
   const weekId = getWeekId(timeZone);
 
-  let doc = await StudentGamification.findOne({ student: studentId });
-  if (!doc) {
-    doc = new StudentGamification({
-      student: studentId,
-      lastActiveDateKey: null,
-      lastActiveDate: null,
-      currentStreak: 0,
-      longestStreak: 0,
-      totalXp: 0,
-      level: 1,
-      badges: [],
-    });
-  }
+  let doc = await getOrCreateStudentGamificationDoc(studentId);
   const levelBefore = doc.level ?? getLevelFromXp(doc.totalXp || 0);
 // check if the student has been active today
   const lastDate =

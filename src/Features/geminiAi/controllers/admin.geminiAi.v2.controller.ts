@@ -367,21 +367,41 @@ export class AdminGeminiAiV2Controller {
     }
   }
 
+  /**
+   * Lesson paths in DB sometimes include a legacy web prefix; S3 keys are stored as e.g. `pdf/...`.
+   */
+  private static normalizeLessonStorageKey(key: string): string {
+    let k = (key || "").trim().replace(/\\/g, "/").replace(/^\//, "");
+    return k.replace(/^public\/res\/lesson\/?/i, "");
+  }
+
   /** Normalize lesson file value to a consistent fileKey (path) and full URL for fetching. */
   private static lessonFileToKeyAndUrl(value: string): { fileKey: string; url: string } {
     const v = (value || "").trim();
     if (!v) return { fileKey: "", url: "" };
+    const base = LESSON_FILES_BASE_URL.replace(/\/$/, "");
     if (v.startsWith("http://") || v.startsWith("https://")) {
       try {
         const u = new URL(v);
-        const fileKey = u.pathname.startsWith("/") ? u.pathname.slice(1) : u.pathname;
-        return { fileKey: fileKey || v, url: v };
+        const rawPath = u.pathname.startsWith("/") ? u.pathname.slice(1) : u.pathname;
+        const fileKey = AdminGeminiAiV2Controller.normalizeLessonStorageKey(rawPath);
+        const hadLegacyPrefix = /^public\/res\/lesson\/?/i.test(
+          rawPath.replace(/^\//, "")
+        );
+        const url =
+          hadLegacyPrefix || fileKey !== rawPath.replace(/^\//, "")
+            ? `${base}/${fileKey}`
+            : v;
+        return { fileKey: fileKey || rawPath || v, url };
       } catch {
-        return { fileKey: v, url: LESSON_FILES_BASE_URL.replace(/\/$/, "") + "/" + v.replace(/^\//, "") };
+        const fileKey = AdminGeminiAiV2Controller.normalizeLessonStorageKey(v);
+        return {
+          fileKey,
+          url: `${base}/${fileKey}`,
+        };
       }
     }
-    const fileKey = v.replace(/^\//, "");
-    const base = LESSON_FILES_BASE_URL.replace(/\/$/, "");
+    const fileKey = AdminGeminiAiV2Controller.normalizeLessonStorageKey(v);
     return { fileKey, url: `${base}/${fileKey}` };
   }
 
@@ -418,7 +438,8 @@ export class AdminGeminiAiV2Controller {
 
   /** Shared: collect pending lesson files for embedding for the given course ObjectIds. */
   private static async preparePendingLessonFilesForCourses(
-    objectIds: mongoose.Types.ObjectId[]
+    objectIds: mongoose.Types.ObjectId[],
+    options?: { fileTypes?: ("pdf" | "video")[] }
   ): Promise<{
     courseIds: string[];
     allFiles: PendingLessonFileRow[];
@@ -427,16 +448,19 @@ export class AdminGeminiAiV2Controller {
     totalProcessedFiles: number;
   }> {
     const courseIds = objectIds.map((id) => id.toString());
-    const allFiles = await AdminGeminiAiV2Controller.collectLessonFiles(objectIds);
-    console.log('allFiles', allFiles)
-    
+    let allFiles = await AdminGeminiAiV2Controller.collectLessonFiles(objectIds);
+    if (options?.fileTypes?.length) {
+      const allow = new Set(options.fileTypes);
+      allFiles = allFiles.filter((f) => allow.has(f.fileType));
+    }
 
     const alreadyProcessed = await ProcessedLessonFile.find({ status: "SUCCESS" })
       .select("lesson fileKey")
       .lean();
     const processedSet = new Set(
       (alreadyProcessed as { lesson: mongoose.Types.ObjectId; fileKey: string }[]).map(
-        (r) => `${r.lesson}_${r.fileKey}`
+        (r) =>
+          `${r.lesson}_${AdminGeminiAiV2Controller.normalizeLessonStorageKey(r.fileKey)}`
       )
     );
     const pendingRaw = allFiles.filter((f) => !processedSet.has(`${f.lessonId}_${f.fileKey}`));
@@ -516,6 +540,86 @@ export class AdminGeminiAiV2Controller {
       return res.status(500).json({
         success: false,
         message: "Error starting course-lessons processing",
+        error: error.message,
+      });
+    }
+  }
+
+  /** Same as processCourseLessonsForEmbedding but only lesson PDF fields (no videos). */
+  static async processCourseLessonsPdfsForEmbedding(req: Request, res: Response) {
+    try {
+      const { courseIds } = req.body as { courseIds?: string[] };
+      if (!Array.isArray(courseIds) || courseIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing or invalid body: courseIds (non-empty array of course IDs).",
+        });
+      }
+      const validIds = courseIds.filter(
+        (id) => typeof id === "string" && id.trim() && mongoose.Types.ObjectId.isValid(id.trim())
+      );
+      if (validIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No valid course IDs provided.",
+        });
+      }
+      const objectIds = validIds.map((id) => new mongoose.Types.ObjectId(id.trim()));
+
+      const { courseIds: resolvedCourseIds, allFiles, pending, totalFiles } =
+        await AdminGeminiAiV2Controller.preparePendingLessonFilesForCourses(objectIds, {
+          fileTypes: ["pdf"],
+        });
+
+      if (allFiles.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "No lesson PDFs found for the given courses.",
+          response: {
+            scope: "pdfs_only",
+            courseIds: resolvedCourseIds,
+            totalFilesToProcess: 0,
+            totalFiles,
+          },
+        });
+      }
+
+      if (pending.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "All lesson PDFs for the given courses have already been processed.",
+          response: {
+            scope: "pdfs_only",
+            courseIds: resolvedCourseIds,
+            totalFilesToProcess: 0,
+            totalSkipped: allFiles.length,
+            totalFiles,
+          },
+        });
+      }
+
+      res.status(202).json({
+        success: true,
+        message:
+          "PDF embedding started. Lesson PDFs are being processed in the background (videos skipped).",
+        response: {
+          scope: "pdfs_only",
+          courseIds: resolvedCourseIds,
+          totalFilesToProcess: pending.length,
+          totalSkipped: allFiles.length - pending.length,
+          totalFiles,
+        },
+      });
+
+      setImmediate(() => {
+        AdminGeminiAiV2Controller.runProcessCourseLessonsBackground(pending).catch((e) => {
+          console.error("[processCourseLessonsPdfsForEmbedding] Background error:", e);
+        });
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error starting course-lesson PDF processing",
         error: error.message,
       });
     }
@@ -601,6 +705,90 @@ export class AdminGeminiAiV2Controller {
       return res.status(500).json({
         success: false,
         message: "Error starting all-courses lesson embedding",
+        error: error.message,
+      });
+    }
+  }
+
+  /** Like processAllCoursesLessonsForEmbedding but only lesson PDFs (no videos). */
+  static async processAllCoursesLessonsPdfsForEmbedding(req: Request, res: Response) {
+    try {
+      const courses = await Course.find({})
+        .select("_id")
+        .lean();
+      const objectIds = (courses as { _id: mongoose.Types.ObjectId }[])
+        .map((c) => c._id)
+        .filter(Boolean);
+
+      if (objectIds.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "No courses found in the database.",
+          response: {
+            scope: "all_courses_pdfs_only",
+            totalCourses: 0,
+            totalFilesToProcess: 0,
+          },
+        });
+      }
+
+      const { courseIds, allFiles, pending, totalFiles, totalProcessedFiles } =
+        await AdminGeminiAiV2Controller.preparePendingLessonFilesForCourses(objectIds, {
+          fileTypes: ["pdf"],
+        });
+
+      if (allFiles.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "No lesson PDFs found across all courses.",
+          response: {
+            scope: "all_courses_pdfs_only",
+            totalCourses: courseIds.length,
+            totalFilesToProcess: 0,
+            totalFiles,
+            totalProcessedFiles,
+          },
+        });
+      }
+
+      if (pending.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "All lesson PDFs for all courses have already been processed.",
+          response: {
+            scope: "all_courses_pdfs_only",
+            totalCourses: courseIds.length,
+            totalFilesToProcess: 0,
+            totalSkipped: allFiles.length,
+            totalFiles,
+            totalProcessedFiles,
+          },
+        });
+      }
+
+      res.status(202).json({
+        success: true,
+        message:
+          "PDF embedding started for all courses (any status). Only PDFs are processed in the background.",
+        response: {
+          scope: "all_courses_pdfs_only",
+          totalCourses: courseIds.length,
+          totalFilesToProcess: pending.length,
+          totalSkipped: allFiles.length - pending.length,
+          totalFiles,
+          totalProcessedFiles,
+        },
+      });
+
+      setImmediate(() => {
+        AdminGeminiAiV2Controller.runProcessCourseLessonsBackground(pending).catch((e) => {
+          console.error("[processAllCoursesLessonsPdfsForEmbedding] Background error:", e);
+        });
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error starting all-courses lesson PDF embedding",
         error: error.message,
       });
     }
@@ -834,6 +1022,61 @@ export class AdminGeminiAiV2Controller {
       return res.status(500).json({
         success: false,
         message: "Error fetching processing status",
+        error: error?.message,
+      });
+    }
+  }
+
+  /**
+   * DB-wide counts by ProcessedLessonFile.status plus current background job progress
+   * (same in-memory job as `/course-lessons-processing-status`).
+   */
+  static async getCourseLessonsProcessingProgress(_req: Request, res: Response) {
+    try {
+      const grouped = (await ProcessedLessonFile.aggregate([
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ])) as { _id: string; count: number }[];
+      const byStatus: Record<"SUCCESS" | "FAILED" | "PROCESSING", number> = {
+        SUCCESS: 0,
+        FAILED: 0,
+        PROCESSING: 0,
+      };
+      for (const row of grouped) {
+        const key = row._id as keyof typeof byStatus;
+        if (key in byStatus) byStatus[key] = row.count;
+      }
+      const totalRecords =
+        byStatus.SUCCESS + byStatus.FAILED + byStatus.PROCESSING;
+
+      const { totalFiles, processedCount, isRunning } = courseLessonsJobState;
+      const backgroundProgressPercent =
+        totalFiles > 0
+          ? Math.min(100, Math.round((processedCount / totalFiles) * 100))
+          : null;
+
+      const bgStatus = isRunning ? "RUNNING" : "IDLE";
+      return res.status(200).json({
+        success: true,
+        message:
+          "Lesson embedding progress: counts by status and current background job.",
+        response: {
+          backgroundJob: {
+            status: bgStatus,
+            isRunning,
+            startedAt: courseLessonsJobState.startedAt?.toISOString() ?? null,
+            totalFiles,
+            processedCount,
+            progressPercent: backgroundProgressPercent,
+            lastError: courseLessonsJobState.lastError,
+          },
+          totalsByStatus: byStatus,
+          totalRecords,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error fetching processing progress",
         error: error?.message,
       });
     }

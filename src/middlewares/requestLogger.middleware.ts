@@ -230,7 +230,11 @@ const getPurpose = (method: string, endpoint: string): string | undefined => {
     { method: "GET", pattern: toRegex("/admin/gemini-ai/student-usage/:studentId"), purpose: "VIEW-GEMINI-AI-STUDENT-USAGE" },
     { method: "GET", pattern: toRegex("/admin/gemini-ai/ai/history"), purpose: "VIEW-GEMINI-AI-HISTORY" },
     { method: "POST", pattern: toRegex("/admin/gemini-ai/process-course-lessons-for-embedding"), purpose: "PROCESS-GEMINI-COURSE-LESSONS-EMBEDDING" },
+    { method: "POST", pattern: toRegex("/admin/gemini-ai/process-course-lessons-pdfs-for-embedding"), purpose: "PROCESS-GEMINI-COURSE-LESSONS-PDFS-EMBEDDING" },
     { method: "POST", pattern: toRegex("/admin/gemini-ai/process-all-courses-lessons-for-embedding"), purpose: "PROCESS-GEMINI-ALL-COURSES-LESSONS-EMBEDDING" },
+    { method: "POST", pattern: toRegex("/admin/gemini-ai/process-all-courses-lessons-pdfs-for-embedding"), purpose: "PROCESS-GEMINI-ALL-COURSES-LESSONS-PDFS-EMBEDDING" },
+    { method: "GET", pattern: toRegex("/admin/gemini-ai/course-lessons-processing-status"), purpose: "VIEW-GEMINI-COURSE-LESSONS-PROCESSING-STATUS" },
+    { method: "GET", pattern: toRegex("/admin/gemini-ai/course-lessons-processing-progress"), purpose: "VIEW-GEMINI-COURSE-LESSONS-PROCESSING-PROGRESS" },
 
     // V2 lesson
     { method: "PATCH", pattern: toRegex("/lesson/complete/:lessonId"), purpose: "COMPLETE-LESSON" },

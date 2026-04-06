@@ -38,8 +38,8 @@ export const authentification = (
         }).catch(() => {});
       }
 
-      // await verifyDeviceFromHeader(req, res, next);
-      next();
+      await verifyDeviceFromHeader(req, res, next);
+      // next();
     } catch (error) {
       if (!res.headersSent) {
         res.status(401).json({ message: "Unauthorized" });

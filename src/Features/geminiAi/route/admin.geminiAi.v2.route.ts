@@ -68,11 +68,29 @@ Router.post(
 );
 
 Router.post(
+  "/process-course-lessons-pdfs-for-embedding",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.processCourseLessonsPdfsForEmbedding(req, res);
+  }
+);
+
+Router.post(
   "/process-all-courses-lessons-for-embedding",
   authentification,
   authorization([Roles.ADMIN]),
   (req: Request, res: Response) => {
     AdminGeminiAiV2Controller.processAllCoursesLessonsForEmbedding(req, res);
+  }
+);
+
+Router.post(
+  "/process-all-courses-lessons-pdfs-for-embedding",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.processAllCoursesLessonsPdfsForEmbedding(req, res);
   }
 );
 
@@ -83,6 +101,15 @@ Router.get(
   authorization([Roles.ADMIN]),
   (req: Request, res: Response) => {
     AdminGeminiAiV2Controller.getCourseLessonsProcessingStatus(req, res);
+  }
+);
+
+Router.get(
+  "/course-lessons-processing-progress",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.getCourseLessonsProcessingProgress(req, res);
   }
 );
 
