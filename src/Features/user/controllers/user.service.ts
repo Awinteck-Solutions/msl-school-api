@@ -6,6 +6,10 @@ import User from "../schema/user.schema";
 import {Status} from "../../../enums/status.enum";
 import multer from "multer";
 import { uploadFile } from "../../../helpers/s3";
+import {
+  type UserNotificationChannel,
+  type UserNotificationSettingsShape,
+} from "../../../helpers/notificationSettings";
 
 interface MulterRequest extends Request {
   file?: multer.File;
@@ -52,6 +56,76 @@ export class UserService {
       return res.status(500).json({
         status: false,
         message: "System error",
+        other: error,
+      });
+    }
+  }
+
+  static async updateNotificationSettings(req: Request, res: Response) {
+    try {
+      const { id } = req["currentUser"] as { id?: string };
+      if (!id) {
+        return res.status(401).json({
+          status: false,
+          message: "user id can't be empty",
+        });
+      }
+
+      const body =
+        req.body && typeof req.body === "object" && !Array.isArray(req.body)
+          ? (req.body as Record<string, unknown>)
+          : {};
+
+      const channels: UserNotificationChannel[] = [
+        "gamification",
+        "streaks",
+        "smartconnect",
+        "course_alerts",
+      ];
+      const $set: Record<string, boolean> = {};
+      for (const key of channels) {
+        if (key in body) {
+          const v = body[key];
+          if (typeof v !== "boolean") {
+            return res.status(400).json({
+              status: false,
+              message: `notificationSettings.${key} must be a boolean when provided`,
+            });
+          }
+          $set[`notificationSettings.${key}`] = v;
+        }
+      }
+
+      if (Object.keys($set).length === 0) {
+        return res.status(400).json({
+          status: false,
+          message:
+            "Provide at least one of: gamification, streaks, smartconnect, course_alerts (boolean)",
+        });
+      }
+
+      await User.updateOne({ _id: id }, { $set });
+      const updated = await User.findOne({ _id: id })
+        .select("notificationSettings")
+        .lean();
+      const settings = (updated as { notificationSettings?: UserNotificationSettingsShape })
+        ?.notificationSettings;
+
+      return res.status(200).json({
+        status: true,
+        message: "Notification settings updated",
+        response: {
+          gamification: settings?.gamification !== false,
+          streaks: settings?.streaks !== false,
+          smartconnect: settings?.smartconnect !== false,
+          course_alerts: settings?.course_alerts !== false,
+        },
+      });
+    } catch (error) {
+      console.log("updateNotificationSettings error :>> ", error);
+      return res.status(500).json({
+        status: false,
+        message: "Notification settings update failed",
         other: error,
       });
     }

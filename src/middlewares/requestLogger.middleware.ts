@@ -53,6 +53,7 @@ const getPurpose = (method: string, endpoint: string): string | undefined => {
     { method: "GET", pattern: toRegex("/user/profile"), purpose: "VIEW-USER-PROFILE" },
     { method: "GET", pattern: toRegex("/user/delete"), purpose: "DELETE-USER" },
     { method: "PATCH", pattern: toRegex("/user/profile"), purpose: "UPDATE-USER-PROFILE" },
+    { method: "PATCH", pattern: toRegex("/user/notification-settings"), purpose: "UPDATE-USER-NOTIFICATION-SETTINGS" },
 
     // V2 admin user
     { method: "GET", pattern: toRegex("/admin/user/all"), purpose: "VIEW-USER-LIST" },

@@ -409,12 +409,20 @@ export class AdminGeminiAiV2Controller {
   private static async collectLessonFiles(
     courseIds: mongoose.Types.ObjectId[]
   ): Promise<{ courseId: string; lessonId: string; fileKey: string; fileType: "pdf" | "video"; url: string }[]> {
-    const lessons = await Lesson.find({ course: { $in: courseIds } })
-      .select("_id course video video1 video2 video3 video4 video5 video6 video7 video8 video9 video10 pdf pdf1 pdf2 pdf3 pdf4 pdf5 pdf6 pdf7 pdf8 pdf9 pdf10")
+    const lessons = await Lesson.find({
+      $or: [
+        { course: { $in: courseIds } },
+        { "linkedCourses.course": { $in: courseIds } },
+      ],
+    })
+      .select(
+        "_id course video video1 video2 video3 video4 video5 video6 video7 video8 video9 video10 pdf pdf1 pdf2 pdf3 pdf4 pdf5 pdf6 pdf7 pdf8 pdf9 pdf10"
+      )
       .lean();
     const videoKeys = ["video", "video1", "video2", "video3", "video4", "video5", "video6", "video7", "video8", "video9", "video10"];
     const pdfKeys = ["pdf", "pdf1", "pdf2", "pdf3", "pdf4", "pdf5", "pdf6", "pdf7", "pdf8", "pdf9", "pdf10"];
     const out: { courseId: string; lessonId: string; fileKey: string; fileType: "pdf" | "video"; url: string }[] = [];
+
     for (const lesson of lessons) {
       const lessonId = (lesson as any)._id.toString();
       const courseId = (lesson as any).course?.toString() || "";

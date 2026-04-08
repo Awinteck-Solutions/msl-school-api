@@ -53,4 +53,5 @@ jobs:
             docker run -d -p 8081:4001 \
               --name mslapp-container \
               --env-file .env-msl \
+              --restart unless-stopped \
               ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:${{ github.sha }}

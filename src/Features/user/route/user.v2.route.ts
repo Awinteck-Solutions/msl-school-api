@@ -76,4 +76,13 @@ Router.patch(
   }
 );
 
+Router.patch(
+  "/notification-settings",
+  authentification,
+  authorization([Roles.USER, Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    UserService.updateNotificationSettings(req, res);
+  }
+);
+
 export default Router;

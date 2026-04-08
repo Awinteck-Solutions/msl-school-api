@@ -46,6 +46,12 @@ const userSchema = new Schema({
             default: true
         }
     },
+    notificationSettings: {
+        gamification: { type: Boolean, default: true },
+        streaks: { type: Boolean, default: true },
+        smartconnect: { type: Boolean, default: true },
+        course_alerts: { type: Boolean, default: true },
+    },
 },  {timestamps: true})
 
 const User = mongoose.model('User', userSchema);

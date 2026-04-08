@@ -5,6 +5,7 @@ import csvParser = require("csv-parser");
 import Enrolled from "../../course/schema/enroll.schema";
 import multer from "multer";
 import { sendFirebaseNotification } from "../../../helpers/firebase";
+import { isUserNotificationEnabled } from "../../../helpers/notificationSettings";
 import User from "../../user/schema/user.schema";
 import Course from "../../course/schema/course.schema";
 type CsvRow = Record<string, string>;
@@ -59,7 +60,9 @@ export class AdminEnrolmentV2Controller {
       .then(async (result) => {
         // get course title
         const course = await Course.findById(courseId).select("title").lean() as any;
-        const student = await User.findOne({ email: email }).select("firebase_token").lean();
+        const student = await User.findOne({ email: email })
+          .select("firebase_token notificationSettings")
+          .lean();
         const firebaseToken = (student as any)?.firebase_token as string | undefined;
         // console.log('student', student)
         if (!firebaseToken) {
@@ -68,11 +71,13 @@ export class AdminEnrolmentV2Controller {
             message: "Student firebase token not found",
           });
         }
+        if (isUserNotificationEnabled(student as any, "course_alerts")) {
           sendFirebaseNotification(firebaseToken, {
             title: "You have been enrolled to a course",
             body: `You have been enrolled to a course ${course.title}`,
             data: { type: "enrolment", event: "enrolment_added", course: courseId.toString() },
           });
+        }
        
         return res.status(201).json({
           status: true,
@@ -236,12 +241,16 @@ export class AdminEnrolmentV2Controller {
       const courseTitle = course?.title ?? "a course";
 
       const students = await User.find({ email: { $in: emails } })
-        .select("firebase_token")
+        .select("firebase_token notificationSettings")
         .lean();
 
-      for (const student of students as { firebase_token?: string }[]) {
+      for (const student of students as {
+        firebase_token?: string;
+        notificationSettings?: unknown;
+      }[]) {
         const firebaseToken = student?.firebase_token;
         if (!firebaseToken) continue;
+        if (!isUserNotificationEnabled(student as any, "course_alerts")) continue;
         sendFirebaseNotification(firebaseToken, {
           title: "You have been enrolled to a course",
           body: `You have been enrolled to a course ${courseTitle}`,
@@ -450,7 +459,9 @@ export class AdminEnrolmentV2Controller {
 
       const result = await Enrolled.insertMany(enrollments);
 
-      const student = await User.findOne({ email: email }).select("firebase_token").lean();
+      const student = await User.findOne({ email: email })
+        .select("firebase_token notificationSettings")
+        .lean();
       const firebaseToken = (student as any)?.firebase_token as string | undefined;
 
       for (const courseId of courseIds) {
@@ -461,12 +472,14 @@ export class AdminEnrolmentV2Controller {
             status: false,
             message: "Student not found",
           });
-        } 
-        sendFirebaseNotification(firebaseToken, {
-          title: "You have been enrolled to a course",
-          body: `You have been enrolled to a course ${course.title}`,
-          data: { type: "enrolment", event: "enrolment_added", course: courseId.toString() },
-        });
+        }
+        if (isUserNotificationEnabled(student as any, "course_alerts")) {
+          sendFirebaseNotification(firebaseToken, {
+            title: "You have been enrolled to a course",
+            body: `You have been enrolled to a course ${course.title}`,
+            data: { type: "enrolment", event: "enrolment_added", course: courseId.toString() },
+          });
+        }
       }
       return res.status(201).json({
         status: true,

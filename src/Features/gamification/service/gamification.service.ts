@@ -5,6 +5,7 @@ import QuizResponse from "../../quiz/schema/quizResponse.schema";
 import Course from "../../course/schema/course.schema";
 import User from "../../user/schema/user.schema";
 import { sendFirebaseNotification } from "../../../helpers/firebase";
+import { isUserNotificationEnabled } from "../../../helpers/notificationSettings";
 import FlashCardCompletion from "../../flashcard/schema/flashcardLeaderboard.schema";
 
 export type ActivityType =
@@ -161,7 +162,7 @@ export async function recordStudentActivity(
 ): Promise<void> {
   try {
   const user = await User.findById(studentId)
-    .select("firebase_token timezone")
+    .select("firebase_token timezone notificationSettings")
     .lean();
   const timeZone = normalizeTimeZone(options?.timeZone || (user as any)?.timezone);
   const today = getTodayKey(timeZone);
@@ -376,12 +377,16 @@ export async function recordStudentActivity(
     doc.dailyChallenge.rewarded = true;
     doc.totalXp += DAILY_CHALLENGE_REWARD_XP;
     doc.level = getLevelFromXp(doc.totalXp);
-    // send notification to the student
-    sendFirebaseNotification(user.firebase_token, {
-      title: "Daily challenge complete!",
-      body: `You earned ${DAILY_CHALLENGE_REWARD_XP} XP.`,
-      data: { type: "gamification", event: "daily_challenge" },
-    });
+    if (
+      isUserNotificationEnabled(user as any, "gamification") &&
+      (user as any)?.firebase_token
+    ) {
+      sendFirebaseNotification((user as any).firebase_token, {
+        title: "Daily challenge complete!",
+        body: `You earned ${DAILY_CHALLENGE_REWARD_XP} XP.`,
+        data: { type: "gamification", event: "daily_challenge" },
+      });
+    }
   }
 
   const weekly = doc.weeklyChallenge;
@@ -416,12 +421,16 @@ export async function recordStudentActivity(
     doc.weeklyChallenge.rewarded = true;
     doc.totalXp += WEEKLY_CHALLENGE_REWARD_XP;
     doc.level = getLevelFromXp(doc.totalXp);
-    // send notification to the student
-    sendFirebaseNotification(user.firebase_token, {
-      title: "Weekly challenge complete!",
-      body: `You earned ${WEEKLY_CHALLENGE_REWARD_XP} XP.`,
-      data: { type: "gamification", event: "weekly_challenge" },
-    });
+    if (
+      isUserNotificationEnabled(user as any, "gamification") &&
+      (user as any)?.firebase_token
+    ) {
+      sendFirebaseNotification((user as any).firebase_token, {
+        title: "Weekly challenge complete!",
+        body: `You earned ${WEEKLY_CHALLENGE_REWARD_XP} XP.`,
+        data: { type: "gamification", event: "weekly_challenge" },
+      });
+    }
   }
   
 
@@ -430,7 +439,9 @@ export async function recordStudentActivity(
   await doc.save();
 
   const firebaseToken = (user as any)?.firebase_token as string | undefined;
-  if (!firebaseToken) return;
+  if (!firebaseToken || !isUserNotificationEnabled(user as any, "gamification")) {
+    return;
+  }
 
   const notifications: { title: string; body: string; data: Record<string, string> }[] =
     [];

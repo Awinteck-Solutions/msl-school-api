@@ -17,6 +17,12 @@ import { startStreakReminderCron } from "./Features/gamification/cron/streakRemi
 
 dotenv.config();
 const app = express();
+process.on("unhandledRejection", (reason) => {
+  console.error("[process] unhandledRejection", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("[process] uncaughtException", error);
+});
 app.use(cors())
 app.use(bodyParser.json({
     verify: (req: any, res, buf) => {

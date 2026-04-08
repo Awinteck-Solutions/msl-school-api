@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import Requests from "../schema/request.schema";
 import { sendFirebaseNotification } from "../../../helpers/firebase";
+import { isUserNotificationEnabled } from "../../../helpers/notificationSettings";
 import User from "../../user/schema/user.schema";
 import Enrolled from "../../course/schema/enroll.schema";
 
@@ -151,7 +152,9 @@ export class AdminRequestV2Controller {
         const course = result.course;
         // console.log("course::", course.title);
         // get the student's firebase token
-        const student = await User.findOne({ email: result.email }).select("firebase_token").lean();
+        const student = await User.findOne({ email: result.email })
+          .select("firebase_token notificationSettings")
+          .lean();
         const firebaseToken = (student as any)?.firebase_token as string | undefined;
         console.log('student', result.email)
        
@@ -171,11 +174,13 @@ export class AdminRequestV2Controller {
               message: "Request approved but Student firebase token not found",
             });
           }
-          sendFirebaseNotification(firebaseToken, {
-            title: "Course Request Approved",
-            body: `Your enrollment request has been approved for ${course.title}`,
-            data: { type: "request", event: "request_approved", course: course._id.toString() },
-          });
+          if (isUserNotificationEnabled(student as any, "course_alerts")) {
+            sendFirebaseNotification(firebaseToken, {
+              title: "Course Request Approved",
+              body: `Your enrollment request has been approved for ${course.title}`,
+              data: { type: "request", event: "request_approved", course: course._id.toString() },
+            });
+          }
 
         }
         return res.status(201).json({

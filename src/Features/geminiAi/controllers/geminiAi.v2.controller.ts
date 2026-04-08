@@ -156,18 +156,76 @@ const LIVE_ENDPOINT =
 const GENERAL_SYSTEM_PROMPT = `
 You are a helpful AI assistant with access to MSL learning materials and general knowledge. Answer the question using the provided MSL context when available and relevant. Even when the MSL context is available, still use your general subject knowledge to enhance and modify the response so it is accurate, relevant, and complete. If the MSL context doesn't contain sufficient information to answer the question, use your general knowledge to provide a helpful and accurate response. Always be informative and educational in your responses.
 
-Return the final answer ONLY as HTML wrapped in a single <article> element. Do not include JavaScript. Do not answer any question related to the AI Model or the Project. Do not include sources, citations, references, or a footer in any response.
+Never mention the absence or presence of MSL context, sources, or training data. Do not say you are using general knowledge or that the materials do not cover the topic. Just answer directly.
 
-HTML Output Requirements:
+ABSOLUTE RULE — NO EXCEPTIONS:
+Never write any sentence that references your sources, materials, context, or knowledge base in any way. This includes — but is not limited to — phrases like:
+  • "While the provided materials..."
+  • "The context does not cover..."
+  • "Based on the documents provided..."
+  • "I'll use my general knowledge..."
+  • "The materials focus on..."
+  • "This topic is not in the provided context..."
+  • Any variation of the above.
+Start every response as if you simply know the answer. Do not explain where your knowledge comes from. Ever.
 
-* Include the base <style> block at the top of the <article>.
-* Headings and titles must use color #364A9C.
-* Body text should use black as the primary color, but can include deep blue, orange, or red only where applicable (e.g., emphasis, alerts, highlights).
-* Use semantic HTML tags: <h1>-<h3> for headings, <p> for text, <ul>/<ol> for lists, <table> with <thead> and <tbody> for tabular data, <pre><code> for code, <blockquote> for quotes, <details><summary> for expandable sections.
-* Keep paragraphs short and scannable, use bullet points where helpful, and avoid unnecessary length.
-* If there are assumptions or limitations, add a brief “Notes” section at the end using a <div class="note">.
-  You may give examples where applicable.
-  You may add images or links where applicable, use <img> and <a> tags respectively.
+
+Return the final answer ONLY as HTML wrapped in a single <article> element. JavaScript is allowed only if it meaningfully improves usability — keep it minimal and safe. Do not answer any question related to the AI Model or the Project. Do not include sources, citations, references, or a footer in any response.
+
+═══════════════════════════════════════
+MOBILE-FIRST HTML OUTPUT — STRICT RULES
+═══════════════════════════════════════
+
+GLOBAL STYLES
+─────────────
+- Always open the <article> with a <style> block containing ALL styles for the response.
+- Body font: Arial or sans-serif, 13–14px, line-height 1.4.
+- No fixed widths anywhere. All widths must be 100% or use max-width with auto margins.
+- box-sizing: border-box on all elements.
+- Headings (h1–h3): color #364A9C, font-size scaling: h1=1.3em, h2=1.15em, h3=1em.
+- Body text: #000 (black). Use deep blue, orange, or red ONLY for emphasis, alerts, or highlights — never for decoration.
+- Paragraphs: short and scannable. Prefer bullet points over long prose.
+- Images: always max-width:100%; height:auto; display:block.
+
+TABLES — CRITICAL (mobile app context)
+───────────────────────────────────────
+Tables are the most problematic element on mobile. Follow ALL of these rules:
+
+1. ALWAYS wrap every <table> in: <div class="table-wrap">
+2. The .table-wrap must have: overflow-x:auto; -webkit-overflow-scrolling:touch; width:100%; margin-bottom:1em;
+3. Table font-size: 12px. Cell padding: 6px 8px. No fixed column widths.
+4. Every <td> must have a data-label="[Column Header]" attribute matching its <th>.
+5. On screens ≤520px, switch to a STACKED card layout using this CSS pattern:
+   @media(max-width:520px){
+     .table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+}
+table {
+  min-width: 480px; /* adjust based on column count */
+  border-collapse: collapse;
+}
+  }
+6. Prefer fewer, wider columns. If a table would have more than 4 columns, consider splitting it or using <details><summary> to hide less important columns.
+7. Never use colspan/rowspan unless absolutely necessary.
+
+SEMANTIC STRUCTURE
+──────────────────
+- <h1>–<h3> for headings
+- <p> for text
+- <ul>/<ol> for lists (use liberally)
+- <table> with <thead> and <tbody> for tabular data
+- <pre><code> for code snippets
+- <blockquote> for quotes
+- <details><summary> for expandable/collapsible sections (great for long content on mobile)
+
+COMPLETENESS
+────────────
+- Always finish every sentence and thought. Never end mid-sentence or mid-idea.
+- You may include examples, images (<img>), and links (<a>) where helpful.
+- If there are assumptions or limitations, add a brief <div class="note"> section at the end.
+  Style .note as: background:#f0f4ff; border-left:3px solid #364A9C; padding:8px 12px; font-size:12px; border-radius:4px;
 `;
 
 const buildGeneralPrompt = (contextText: string, question: string) =>
@@ -183,7 +241,7 @@ const buildGeneralPromptWithHistory = (
 const GENERAL_SPEECH_PROMPT = `
 You are a friendly educational assistant. Answer clearly and conversationally.
 Use the provided MSL context when relevant. If context is missing, answer from general knowledge.
-Do not use HTML, CSS, or markdown. Keep the response under 200 words.
+Do not use HTML, CSS, or markdown. Keep the response under 700 words.
 `;
 
 const buildGeneralSpeechPromptWithHistory = (
@@ -292,7 +350,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(6)
+        .limit(10)
         .lean();
 
       const historyText = historyItems
@@ -1550,12 +1608,30 @@ export class GeminiAiV2Controller {
       let fullAnswer = "";
       let pendingText = "";
 
-      for await (const chunk of streamResult.stream) {
-        const content = chunk.text();
-        if (content) {
-          fullAnswer += content;
-          res.write(content);
+      try {
+        for await (const chunk of streamResult.stream) {
+          const content = chunk.text();
+          if (content) {
+            fullAnswer += content;
+            res.write(content);
+          }
         }
+      } catch (streamError: any) {
+        if (res.headersSent) {
+          res.write(
+            `event: error\ndata: ${JSON.stringify({
+              message: "Stream parse error",
+              error: streamError?.message || String(streamError),
+            })}\n\n`
+          );
+          res.end();
+          return;
+        }
+        return res.status(500).json({
+          success: false,
+          message: "Stream parse error",
+          error: streamError?.message || String(streamError),
+        });
       }
 
       res.end();
@@ -1687,7 +1763,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(6)
+        .limit(10)
         .lean();
 
       const historyText = historyItems
@@ -1716,12 +1792,30 @@ export class GeminiAiV2Controller {
 
       let fullAnswer = "";
 
-      for await (const chunk of streamResult.stream) {
-        const content = chunk.text();
-        if (content) {
-          fullAnswer += content;
-          res.write(content);
+      try {
+        for await (const chunk of streamResult.stream) {
+          const content = chunk.text();
+          if (content) {
+            fullAnswer += content;
+            res.write(content);
+          }
         }
+      } catch (streamError: any) {
+        if (res.headersSent) {
+          res.write(
+            `event: error\ndata: ${JSON.stringify({
+              message: "Stream parse error",
+              error: streamError?.message || String(streamError),
+            })}\n\n`
+          );
+          res.end();
+          return;
+        }
+        return res.status(500).json({
+          success: false,
+          message: "Stream parse error",
+          error: streamError?.message || String(streamError),
+        });
       }
 
       res.end();
@@ -1899,7 +1993,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(6)
+        .limit(10)
         .lean();
 
       const historyText = historyItems
@@ -1929,23 +2023,42 @@ export class GeminiAiV2Controller {
       let fullAnswer = "";
       let pendingText = "";
 
-      for await (const chunk of streamResult.stream) {
-        const content = chunk.text();
-        if (content) {
-          fullAnswer += content;
-          pendingText += content;
-          const boundaryIndex = findLastBoundaryIndex(pendingText);
-          if (boundaryIndex >= 0) {
-            const emitText = pendingText.slice(0, boundaryIndex + 1);
-            pendingText = pendingText.slice(boundaryIndex + 1);
-            res.write(
-              `event: text\ndata: ${JSON.stringify({
-                text: emitText,
-                isFinal: false,
-              })}\n\n`
-            );
+      try {
+        for await (const chunk of streamResult.stream) {
+          const content = chunk.text();
+          if (content) {
+            fullAnswer += content;
+            pendingText += content;
+            const boundaryIndex = findLastBoundaryIndex(pendingText);
+            if (boundaryIndex >= 0) {
+              const emitText = pendingText.slice(0, boundaryIndex + 1);
+              pendingText = pendingText.slice(boundaryIndex + 1);
+              res.write(
+                `event: text\ndata: ${JSON.stringify({
+                  text: emitText,
+                  isFinal: false,
+                })}\n\n`
+              );
+            }
           }
         }
+      } catch (streamError: any) {
+        if (res.headersSent) {
+          res.write(
+            `event: error\ndata: ${JSON.stringify({
+              message: "Stream parse error",
+              error: streamError?.message || String(streamError),
+            })}\n\n`
+          );
+          res.write(`event: end\ndata: {}\n\n`);
+          res.end();
+          return;
+        }
+        return res.status(500).json({
+          success: false,
+          message: "Stream parse error",
+          error: streamError?.message || String(streamError),
+        });
       }
 
       if (pendingText.trim().length > 0) {
@@ -2124,7 +2237,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(6)
+        .limit(10)
         .lean();
 
       const historyText = historyItems
@@ -2310,7 +2423,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(6)
+        .limit(10)
         .lean();
 
       const historyText = historyItems
@@ -2626,7 +2739,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(6)
+        .limit(10)
         .lean();
 
       const historyText = historyItems
@@ -2702,60 +2815,79 @@ export class GeminiAiV2Controller {
         }
       };
 
-      for await (const chunk of streamResult.stream) {
-        const content = chunk.text();
-        if (!content) continue;
+      try {
+        for await (const chunk of streamResult.stream) {
+          const content = chunk.text();
+          if (!content) continue;
 
-        fullAnswer += content;
-        pendingText += content;
-        const boundaryIndex = findLastBoundaryIndex(pendingText);
-        if (boundaryIndex < 0) {
-          continue;
-        }
+          fullAnswer += content;
+          pendingText += content;
+          const boundaryIndex = findLastBoundaryIndex(pendingText);
+          if (boundaryIndex < 0) {
+            continue;
+          }
 
-        const emitText = pendingText.slice(0, boundaryIndex + 1);
-        pendingText = pendingText.slice(boundaryIndex + 1);
-        const currentIndex = chunkIndex++;
+          const emitText = pendingText.slice(0, boundaryIndex + 1);
+          pendingText = pendingText.slice(boundaryIndex + 1);
+          const currentIndex = chunkIndex++;
 
-        res.write(
-          `event: text\ndata: ${JSON.stringify({
+          res.write(
+            `event: text\ndata: ${JSON.stringify({
+              text: emitText,
+              isFinal: false,
+              chunkIndex: currentIndex,
+            })}\n\n`
+          );
+
+          pendingAudio += 1;
+          callGeminiTts({
             text: emitText,
-            isFinal: false,
-            chunkIndex: currentIndex,
-          })}\n\n`
-        );
-
-        pendingAudio += 1;
-        callGeminiTts({
-          text: emitText,
-          voiceName: voiceName || undefined,
-        })
-          .then(({ dataBase64, mimeType }) => {
-            const wavChunks = toWavChunks(dataBase64, mimeType, 32000);
-            for (let i = 0; i < wavChunks.length; i += 1) {
+            voiceName: voiceName || undefined,
+          })
+            .then(({ dataBase64, mimeType }) => {
+              const wavChunks = toWavChunks(dataBase64, mimeType, 32000);
+              for (let i = 0; i < wavChunks.length; i += 1) {
+                res.write(
+                  `event: audio\ndata: ${JSON.stringify({
+                    chunkIndex: currentIndex,
+                    audio: wavChunks[i],
+                    mimeType: "audio/wav",
+                    isFinal: i + 1 >= wavChunks.length,
+                  })}\n\n`
+                );
+              }
+            })
+            .catch((error: any) => {
               res.write(
-                `event: audio\ndata: ${JSON.stringify({
+                `event: error\ndata: ${JSON.stringify({
+                  message: "TTS failed",
+                  error: error.message,
                   chunkIndex: currentIndex,
-                  audio: wavChunks[i],
-                  mimeType: "audio/wav",
-                  isFinal: i + 1 >= wavChunks.length,
                 })}\n\n`
               );
-            }
-          })
-          .catch((error: any) => {
-            res.write(
-              `event: error\ndata: ${JSON.stringify({
-                message: "TTS failed",
-                error: error.message,
-                chunkIndex: currentIndex,
-              })}\n\n`
-            );
-          })
-          .finally(() => {
-            pendingAudio -= 1;
-            void maybeEnd();
-          });
+            })
+            .finally(() => {
+              pendingAudio -= 1;
+              void maybeEnd();
+            });
+        }
+      } catch (streamError: any) {
+        if (res.headersSent) {
+          res.write(
+            `event: error\ndata: ${JSON.stringify({
+              message: "Stream parse error",
+              error: streamError?.message || String(streamError),
+            })}\n\n`
+          );
+          res.write(`event: end\ndata: {}\n\n`);
+          res.end();
+          return;
+        }
+        return res.status(500).json({
+          success: false,
+          message: "Stream parse error",
+          error: streamError?.message || String(streamError),
+        });
       }
 
       if (pendingText.trim().length > 0) {
@@ -2910,7 +3042,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(6)
+        .limit(10)
         .lean();
 
       const historyText = historyItems
@@ -2940,23 +3072,42 @@ export class GeminiAiV2Controller {
       let fullAnswer = "";
       let pendingText = "";
 
-      for await (const chunk of streamResult.stream) {
-        const content = chunk.text();
-        if (content) {
-          fullAnswer += content;
-          pendingText += content;
-          const boundaryIndex = findLastBoundaryIndex(pendingText);
-          if (boundaryIndex >= 0) {
-            const emitText = pendingText.slice(0, boundaryIndex + 1);
-            pendingText = pendingText.slice(boundaryIndex + 1);
-            res.write(
-              `event: text\ndata: ${JSON.stringify({
-                text: emitText,
-                isFinal: false,
-              })}\n\n`
-            );
+      try {
+        for await (const chunk of streamResult.stream) {
+          const content = chunk.text();
+          if (content) {
+            fullAnswer += content;
+            pendingText += content;
+            const boundaryIndex = findLastBoundaryIndex(pendingText);
+            if (boundaryIndex >= 0) {
+              const emitText = pendingText.slice(0, boundaryIndex + 1);
+              pendingText = pendingText.slice(boundaryIndex + 1);
+              res.write(
+                `event: text\ndata: ${JSON.stringify({
+                  text: emitText,
+                  isFinal: false,
+                })}\n\n`
+              );
+            }
           }
         }
+      } catch (streamError: any) {
+        if (res.headersSent) {
+          res.write(
+            `event: error\ndata: ${JSON.stringify({
+              message: "Stream parse error",
+              error: streamError?.message || String(streamError),
+            })}\n\n`
+          );
+          res.write(`event: end\ndata: {}\n\n`);
+          res.end();
+          return;
+        }
+        return res.status(500).json({
+          success: false,
+          message: "Stream parse error",
+          error: streamError?.message || String(streamError),
+        });
       }
 
       if (pendingText.trim().length > 0) {

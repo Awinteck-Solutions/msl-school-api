@@ -7,6 +7,7 @@ import {
   normalizeTimeZone,
 } from "../service/gamification.service";
 import { sendFirebaseNotification } from "../../../helpers/firebase";
+import { isUserNotificationEnabled } from "../../../helpers/notificationSettings";
 
 type StreakReminderOptions = {
   cronExpression?: string;
@@ -35,14 +36,13 @@ export const startStreakReminderCron = (
 
         for (const doc of candidates as any[]) {
           const user = await User.findById(doc.student)
-            .select("firebase_token timezone email")
+            .select("firebase_token timezone email notificationSettings")
             .lean();
           const firebaseToken = (user as any)?.firebase_token as
             | string
             | undefined;
           if (!firebaseToken) continue;
-
-          console.log('CRON RUNNING FOR USER', user?.email)
+          if (!isUserNotificationEnabled(user as any, "streaks")) continue;
 
           const timeZone = normalizeTimeZone((user as any)?.timezone);
           const todayKey = getTodayKey(timeZone);
