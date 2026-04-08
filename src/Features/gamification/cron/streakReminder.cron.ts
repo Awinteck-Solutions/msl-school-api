@@ -23,8 +23,8 @@ const getYesterdayKey = (timeZone: string) => {
 export const startStreakReminderCron = (
   options: StreakReminderOptions = {}
 ) => {
-  // Default 17:30 UTC daily; override via options.cronExpression / STREAK_REMINDER_CRON
-  const cronExpression = options.cronExpression || "00 18 * * *";
+  // Default 18:00 GMT daily; override via options.cronExpression / STREAK_REMINDER_CRON
+  const cronExpression = options.cronExpression || "0 18 * * *";
 
   cron.schedule(
     cronExpression,
@@ -74,6 +74,6 @@ export const startStreakReminderCron = (
         console.error("[gamification] streak reminder cron failed", error);
       }
     },
-    { timezone: "Etc/UTC" }
+    { timezone: "Etc/GMT" }
   );
 };
