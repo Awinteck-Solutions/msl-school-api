@@ -15,7 +15,7 @@ import AiUsage from "../../mslAi/schema/aiUsage.schema";
 
 export const COLLECTION_NAME = "gemini_ai";
 export const GEMINI_CHAT_MODEL =
-  process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
+  process.env.GEMINI_CHAT_MODEL || "gemini-2.0-flash";
 export const GEMINI_EMBEDDING_MODEL =
   process.env.GEMINI_EMBEDDING_MODEL || "gemini-embedding-001";
 export const GEMINI_AUDIO_MODEL =
@@ -24,11 +24,11 @@ export const GEMINI_AUDIO_MODEL =
 export const GEMINI_AUDIO_METHOD =
   process.env.GEMINI_AUDIO_METHOD || "generateContent";
 export const GEMINI_TTS_MODEL =
-  process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-tts";
+  process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
 export const GEMINI_TTS_VOICE =
   process.env.GEMINI_TTS_VOICE || "Aoede";
 export const GEMINI_LIVE_MODEL =
-  process.env.GEMINI_LIVE_MODEL || "gemini-2.5-flash-live";
+  process.env.GEMINI_LIVE_MODEL || "models/gemini-2.5-flash-native-audio-latest";
 export const GEMINI_LIVE_AUDIO_MIME =
   process.env.GEMINI_LIVE_AUDIO_MIME || "audio/pcm;rate=24000";
 export const GEMINI_EMBEDDING_DIMENSIONS = 768;
