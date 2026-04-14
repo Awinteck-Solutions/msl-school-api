@@ -178,7 +178,7 @@ export class AdminRequestV2Controller {
             sendFirebaseNotification(firebaseToken, {
               title: "Course Request Approved",
               body: `Your enrollment request has been approved for ${course.title}`,
-              data: { type: "request", event: "request_approved", course: course._id.toString() },
+              data: { type: "request", event: "request_approved", course: course._id.toString(), courseTitle: course.title },
             });
           }
 

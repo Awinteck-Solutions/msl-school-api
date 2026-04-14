@@ -28,7 +28,7 @@ const processedLessonFileSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["SUCCESS", "FAILED", "PROCESSING"],
+      enum: ["SUCCESS", "FAILED", "PROCESSING", "SKIPPED"],
       default: "PROCESSING",
       required: true,
     },

@@ -11,7 +11,6 @@ export class FlashcardV2Controller {
     try {
       // const { email } = req.params;
       const { email } = req['currentUser'] as { email: string };
-      console.log('email', email)
       if (!email) {
         return res.status(400).json({ error: "Missing email parameter" });
       }

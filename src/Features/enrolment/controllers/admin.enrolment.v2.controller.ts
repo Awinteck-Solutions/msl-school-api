@@ -75,7 +75,7 @@ export class AdminEnrolmentV2Controller {
           sendFirebaseNotification(firebaseToken, {
             title: "You have been enrolled to a course",
             body: `You have been enrolled to a course ${course.title}`,
-            data: { type: "enrolment", event: "enrolment_added", course: courseId.toString() },
+            data: { type: "enrolment", event: "enrolment_added", course: courseId.toString(), courseTitle: course.title },
           });
         }
        
@@ -258,6 +258,7 @@ export class AdminEnrolmentV2Controller {
             type: "enrolment",
             event: "enrolment_added",
             course: courseId.toString(),
+            courseTitle: courseTitle,
           },
         }).catch(() => {});
       }
@@ -477,7 +478,7 @@ export class AdminEnrolmentV2Controller {
           sendFirebaseNotification(firebaseToken, {
             title: "You have been enrolled to a course",
             body: `You have been enrolled to a course ${course.title}`,
-            data: { type: "enrolment", event: "enrolment_added", course: courseId.toString() },
+            data: { type: "enrolment", event: "enrolment_added", course: courseId.toString(), courseTitle: course.title },
           });
         }
       }

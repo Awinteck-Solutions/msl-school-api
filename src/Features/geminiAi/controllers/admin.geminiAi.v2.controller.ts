@@ -905,7 +905,18 @@ export class AdminGeminiAiV2Controller {
         );
         console.log(`[processCourseLessons] Processing: ${file.fileKey} (${file.fileType})`);
 
-        const buffer = await downloadFileFromUrl(file.url);
+        let buffer: Buffer;
+        try {
+          buffer = await downloadFileFromUrl(file.url);
+        } catch (downloadError: any) {
+          const msg = downloadError?.message ?? String(downloadError);
+          if (msg.includes("HTTP 403")) {
+            console.warn(
+              `[processCourseLessons] Forbidden (403): ${file.fileKey} (${file.url})`
+            );
+          }
+          throw downloadError;
+        }
         const fileSizeMB = buffer.length / (1024 * 1024);
         await ProcessedLessonFile.updateOne(
           { _id: doc._id },
@@ -914,9 +925,32 @@ export class AdminGeminiAiV2Controller {
 
         let allChunks: { text: string; chunkIndex: number }[] = [];
         if (file.fileType === "pdf") {
-          const text = await parsePdfText(buffer);
+          let text = "";
+          try {
+            text = await parsePdfText(buffer);
+          } catch (parseError: any) {
+            const msg = parseError?.message ?? String(parseError);
+            console.warn(
+              `[processCourseLessons] Skipped: ${file.fileKey} (invalid PDF: ${msg})`
+            );
+          }
           if (!text || text.length < 10) {
-            throw new Error("PDF contained no extractable text");
+            await ProcessedLessonFile.updateOne(
+              { _id: doc._id },
+              {
+                $set: {
+                  status: "SKIPPED",
+                  chunksCount: 0,
+                  errorMessage: "Skipped: PDF has no extractable text",
+                  processedAt: new Date(),
+                },
+              }
+            );
+            console.log(
+              `[processCourseLessons] Skipped: ${file.fileKey} (empty PDF text)`
+            );
+            courseLessonsJobState.processedCount += 1;
+            continue;
           }
           const chunks = chunkText(text, 500);
           allChunks = chunks.map((t, i) => ({ text: t, chunkIndex: i }));
