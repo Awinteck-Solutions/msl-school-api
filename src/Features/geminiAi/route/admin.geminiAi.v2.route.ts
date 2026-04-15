@@ -124,6 +124,24 @@ Router.get(
 );
 
 Router.post(
+  "/backfill-course-ids",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.backfillCourseIds(req, res);
+  }
+);
+
+Router.get(
+  "/backfill-course-ids/status",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.getBackfillCourseIdsStatus(req, res);
+  }
+);
+
+Router.post(
   "/upload-pdf",
   authentification,
   authorization([Roles.ADMIN]),

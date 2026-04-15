@@ -593,7 +593,14 @@ export const buildCollectionVectorConfig = (): any => ({
 });
 
 /** Payload keys used in filters; must have keyword indexes in Qdrant. */
-const PAYLOAD_INDEX_KEYS = ["courseId", "lessonId", "s3Key", "pdfKey"] as const;
+const PAYLOAD_INDEX_KEYS = [
+  "sourceType",
+  "courseId",
+  "courseIds",
+  "lessonId",
+  "s3Key",
+  "pdfKey",
+] as const;
 
 /**
  * Ensure keyword payload indexes exist for the Gemini collection so filter queries (courseId, lessonId, s3Key, pdfKey) work.
@@ -650,7 +657,12 @@ export const buildContentFilter = (options: {
     });
   }
   if (options.courseId) {
-    must.push({ key: "courseId", match: { value: options.courseId } });
+    must.push({
+      should: [
+        { key: "courseId", match: { value: options.courseId } },
+        { key: "courseIds", match: { any: [options.courseId] } },
+      ],
+    });
   }
   if (options.lessonId) {
     must.push({ key: "lessonId", match: { value: options.lessonId } });

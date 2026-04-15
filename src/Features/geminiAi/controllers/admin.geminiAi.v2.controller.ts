@@ -51,6 +51,7 @@ interface MulterRequest extends Request {
 
 type PendingLessonFileRow = {
   courseId: string;
+  courseIds: string[];
   lessonId: string;
   fileKey: string;
   fileType: "pdf" | "video";
@@ -69,6 +70,14 @@ const courseLessonsJobState = {
   startedAt: null as Date | null,
   totalFiles: 0,
   processedCount: 0,
+  lastError: null as string | null,
+};
+
+const backfillCourseIdsJobState = {
+  isRunning: false,
+  startedAt: null as Date | null,
+  updatedLessons: 0,
+  updatedPoints: 0,
   lastError: null as string | null,
 };
 
@@ -408,7 +417,16 @@ export class AdminGeminiAiV2Controller {
   /** Collect all (courseId, lessonId, fileKey, fileType) from lessons for given courseIds. */
   private static async collectLessonFiles(
     courseIds: mongoose.Types.ObjectId[]
-  ): Promise<{ courseId: string; lessonId: string; fileKey: string; fileType: "pdf" | "video"; url: string }[]> {
+  ): Promise<
+    {
+      courseId: string;
+      courseIds: string[];
+      lessonId: string;
+      fileKey: string;
+      fileType: "pdf" | "video";
+      url: string;
+    }[]
+  > {
     const lessons = await Lesson.find({
       $or: [
         { course: { $in: courseIds } },
@@ -416,28 +434,59 @@ export class AdminGeminiAiV2Controller {
       ],
     })
       .select(
-        "_id course video video1 video2 video3 video4 video5 video6 video7 video8 video9 video10 pdf pdf1 pdf2 pdf3 pdf4 pdf5 pdf6 pdf7 pdf8 pdf9 pdf10"
+        "_id course linkedCourses video video1 video2 video3 video4 video5 video6 video7 video8 video9 video10 pdf pdf1 pdf2 pdf3 pdf4 pdf5 pdf6 pdf7 pdf8 pdf9 pdf10"
       )
       .lean();
     const videoKeys = ["video", "video1", "video2", "video3", "video4", "video5", "video6", "video7", "video8", "video9", "video10"];
     const pdfKeys = ["pdf", "pdf1", "pdf2", "pdf3", "pdf4", "pdf5", "pdf6", "pdf7", "pdf8", "pdf9", "pdf10"];
-    const out: { courseId: string; lessonId: string; fileKey: string; fileType: "pdf" | "video"; url: string }[] = [];
+    const out: {
+      courseId: string;
+      courseIds: string[];
+      lessonId: string;
+      fileKey: string;
+      fileType: "pdf" | "video";
+      url: string;
+    }[] = [];
 
     for (const lesson of lessons) {
       const lessonId = (lesson as any)._id.toString();
       const courseId = (lesson as any).course?.toString() || "";
+      const linkedCourseIds = Array.isArray((lesson as any).linkedCourses)
+        ? (lesson as any).linkedCourses
+            .map((c: any) => c?.course?.toString())
+            .filter(Boolean)
+        : [];
+      const courseIdsForLesson = Array.from(
+        new Set([courseId, ...linkedCourseIds].filter(Boolean))
+      );
       for (const k of videoKeys) {
         const v = (lesson as any)[k];
         if (v) {
           const { fileKey, url } = AdminGeminiAiV2Controller.lessonFileToKeyAndUrl(v);
-          if (fileKey) out.push({ courseId, lessonId, fileKey, fileType: "video", url });
+          if (fileKey)
+            out.push({
+              courseId,
+              courseIds: courseIdsForLesson,
+              lessonId,
+              fileKey,
+              fileType: "video",
+              url,
+            });
         }
       }
       for (const k of pdfKeys) {
         const v = (lesson as any)[k];
         if (v) {
           const { fileKey, url } = AdminGeminiAiV2Controller.lessonFileToKeyAndUrl(v);
-          if (fileKey) out.push({ courseId, lessonId, fileKey, fileType: "pdf", url });
+          if (fileKey)
+            out.push({
+              courseId,
+              courseIds: courseIdsForLesson,
+              lessonId,
+              fileKey,
+              fileType: "pdf",
+              url,
+            });
         }
       }
     }
@@ -506,6 +555,11 @@ export class AdminGeminiAiV2Controller {
 
       const { courseIds: resolvedCourseIds, allFiles, pending, totalFiles } =
         await AdminGeminiAiV2Controller.preparePendingLessonFilesForCourses(objectIds);
+      
+      console.log('allFiles', allFiles)
+      console.log('pending', pending)
+      console.log('totalFiles', totalFiles)
+      console.log('resolvedCourseIds', resolvedCourseIds)
 
       if (allFiles.length === 0) {
         return res.status(200).json({
@@ -860,7 +914,14 @@ export class AdminGeminiAiV2Controller {
 
   /** Background job: process each pending file, update ProcessedLessonFile. */
   static async runProcessCourseLessonsBackground(
-    pending: { courseId: string; lessonId: string; fileKey: string; fileType: "pdf" | "video"; url: string }[]
+    pending: {
+      courseId: string;
+      courseIds: string[];
+      lessonId: string;
+      fileKey: string;
+      fileType: "pdf" | "video";
+      url: string;
+    }[]
   ): Promise<void> {
     courseLessonsJobState.isRunning = true;
     courseLessonsJobState.startedAt = new Date();
@@ -978,6 +1039,11 @@ export class AdminGeminiAiV2Controller {
               sourceUrl: file.url,
               s3Key: file.fileKey,
               courseId: file.courseId,
+              courseIds: Array.isArray(file.courseIds)
+                ? file.courseIds
+                : file.courseId
+                ? [file.courseId]
+                : [],
               lessonId: file.lessonId,
               fileName: path.basename(file.fileKey),
               chunkIndex: item.chunkIndex,
@@ -1041,6 +1107,169 @@ export class AdminGeminiAiV2Controller {
       console.log(`[processCourseLessons] Background job finished`);
     } finally {
       courseLessonsJobState.isRunning = false;
+    }
+  }
+
+  /** Background job: backfill courseIds payloads for existing lesson vectors. */
+  private static async runBackfillCourseIds(): Promise<void> {
+    backfillCourseIdsJobState.isRunning = true;
+    backfillCourseIdsJobState.startedAt = new Date();
+    backfillCourseIdsJobState.updatedLessons = 0;
+    backfillCourseIdsJobState.updatedPoints = 0;
+    backfillCourseIdsJobState.lastError = null;
+    console.log("[backfillCourseIds] Starting backfill job");
+    try {
+      await ensurePayloadIndexesForGeminiCollection();
+
+      const lessons = await Lesson.find({})
+        .select("_id course linkedCourses")
+        .lean();
+      const lessonCourseMap = new Map<string, string[]>();
+      for (const lesson of lessons as any[]) {
+        const lessonId = lesson?._id?.toString();
+        if (!lessonId) continue;
+        const courseId = lesson?.course?.toString();
+        const linkedCourseIds = Array.isArray(lesson?.linkedCourses)
+          ? lesson.linkedCourses
+              .map((c: any) => c?.course?.toString())
+              .filter(Boolean)
+          : [];
+        const courseIds = Array.from(
+          new Set([courseId, ...linkedCourseIds].filter(Boolean))
+        );
+        if (courseIds.length > 0) {
+          lessonCourseMap.set(lessonId, courseIds);
+        }
+      }
+
+      let offset: string | number | null = null;
+      const limit = 500;
+      while (true) {
+        const scrollRes = (await handleQdrantOperation(
+          () =>
+            qdrant.scroll(COLLECTION_NAME, {
+              limit,
+              offset,
+              with_payload: true,
+              with_vector: false,
+              filter: {
+                must: [{ key: "sourceType", match: { value: "lesson" } }],
+              },
+            }),
+          "qdrant scroll for backfill"
+        )) as any;
+
+        const points = scrollRes?.points ?? [];
+        if (points.length === 0) break;
+
+        const lessonToPoints = new Map<string, string[]>();
+        for (const point of points) {
+          const lessonId = point?.payload?.lessonId;
+          if (!lessonId) continue;
+          const courseIds = lessonCourseMap.get(String(lessonId));
+          if (!courseIds || courseIds.length === 0) continue;
+          const existing = Array.isArray(point?.payload?.courseIds)
+            ? point.payload.courseIds
+            : [];
+          const hasAll = courseIds.every((id) => existing.includes(id));
+          if (hasAll) continue;
+          const ids = lessonToPoints.get(String(lessonId)) || [];
+          ids.push(point.id);
+          lessonToPoints.set(String(lessonId), ids);
+        }
+
+        for (const [lessonId, pointIds] of lessonToPoints.entries()) {
+          if (!pointIds.length) continue;
+          const courseIds = lessonCourseMap.get(lessonId);
+          if (!courseIds) continue;
+          try {
+            await handleQdrantOperation(
+              () =>
+                qdrant.setPayload(COLLECTION_NAME, {
+                  payload: { courseIds },
+                  points: pointIds,
+                  wait: true,
+                }),
+              "qdrant setPayload backfill"
+            );
+          } catch (error: any) {
+            const qdrantMessage =
+              error?.data?.status?.error || error?.message || String(error);
+            backfillCourseIdsJobState.lastError = qdrantMessage;
+            console.error(
+              `[backfillCourseIds] Qdrant setPayload failed for lesson ${lessonId}: ${qdrantMessage}`
+            );
+            continue;
+          }
+          backfillCourseIdsJobState.updatedLessons += 1;
+          backfillCourseIdsJobState.updatedPoints += pointIds.length;
+        }
+
+        const next = scrollRes.next_page_offset;
+        offset =
+          next !== undefined && next !== null && typeof next !== "object"
+            ? next
+            : null;
+        if (offset == null) break;
+      }
+
+      console.log(
+        `[backfillCourseIds] Completed. Updated lessons: ${backfillCourseIdsJobState.updatedLessons}, points: ${backfillCourseIdsJobState.updatedPoints}`
+      );
+    } catch (error: any) {
+      const msg =
+        error?.data?.status?.error || error?.message || String(error);
+      backfillCourseIdsJobState.lastError = msg;
+      console.error("[backfillCourseIds] Failed", msg);
+    } finally {
+      backfillCourseIdsJobState.isRunning = false;
+    }
+  }
+
+  /** Trigger backfill of courseIds payloads in Qdrant. */
+  static async backfillCourseIds(req: Request, res: Response) {
+    try {
+      res.status(202).json({
+        success: true,
+        message: "Backfill started. Updating courseIds payloads in Qdrant.",
+      });
+
+      setImmediate(() => {
+        AdminGeminiAiV2Controller.runBackfillCourseIds().catch((e) => {
+          console.error("[backfillCourseIds] Background error:", e);
+        });
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error starting backfill",
+        error: error?.message,
+      });
+    }
+  }
+
+  static async getBackfillCourseIdsStatus(_req: Request, res: Response) {
+    try {
+      return res.status(200).json({
+        success: true,
+        message: backfillCourseIdsJobState.isRunning
+          ? "Backfill job is running."
+          : "Backfill job is idle.",
+        response: {
+          status: backfillCourseIdsJobState.isRunning ? "RUNNING" : "IDLE",
+          isRunning: backfillCourseIdsJobState.isRunning,
+          startedAt: backfillCourseIdsJobState.startedAt?.toISOString() ?? null,
+          updatedLessons: backfillCourseIdsJobState.updatedLessons,
+          updatedPoints: backfillCourseIdsJobState.updatedPoints,
+          lastError: backfillCourseIdsJobState.lastError,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error fetching backfill status",
+        error: error?.message,
+      });
     }
   }
 
