@@ -24,7 +24,7 @@ export const GEMINI_AUDIO_MODEL =
 export const GEMINI_AUDIO_METHOD =
   process.env.GEMINI_AUDIO_METHOD || "generateContent";
 export const GEMINI_TTS_MODEL =
-  process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-tts";
+  process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
 export const GEMINI_TTS_VOICE =
   process.env.GEMINI_TTS_VOICE || "Aoede";
 export const GEMINI_LIVE_MODEL =
@@ -34,6 +34,7 @@ export const GEMINI_LIVE_AUDIO_MIME =
 export const GEMINI_EMBEDDING_DIMENSIONS = 768;
 export const QDRANT_VECTOR_NAME =
   process.env.GEMINI_QDRANT_VECTOR_NAME || "default";
+const MAX_TTS_CHARS = Number(process.env.GEMINI_TTS_MAX_CHARS) || 4000;
 
 export const bucketName = process.env.S3_BUCKET || "";
 /** Base URL for lesson files (PDFs/videos) stored in S3. Used when processing course lessons for embedding. */
@@ -112,13 +113,18 @@ export const callGeminiTts = async (params: {
     throw new Error("Missing GEMINI_API_KEY");
   }
 
+  let text = (params.text || "").trim();
+  if (text.length > MAX_TTS_CHARS) {
+    text = `${text.slice(0, MAX_TTS_CHARS).trim()}...`;
+  }
+
   const modelName = GEMINI_TTS_MODEL.replace(/^models\//, "");
   const url = `${GEMINI_API_BASE}/${modelName}:generateContent?key=${apiKey}`;
   const body = {
     contents: [
       {
         role: "user",
-        parts: [{ text: params.text }],
+        parts: [{ text }],
       },
     ],
     generationConfig: {
@@ -133,33 +139,48 @@ export const callGeminiTts = async (params: {
     },
   };
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const maxAttempts = 3;
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Gemini TTS request failed (${response.status}): ${
-        errorText || "Unknown error"
-      }`
-    );
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Gemini TTS request failed (${response.status}): ${
+            errorText || "Unknown error"
+          }`
+        );
+      }
+
+      const data: any = await response.json();
+      const parts = data?.candidates?.[0]?.content?.parts || [];
+      const audioPart = parts.find((part: any) => part?.inlineData?.data);
+      if (!audioPart) {
+        throw new Error("Gemini TTS response did not include audio");
+      }
+
+      return {
+        mimeType: audioPart.inlineData.mimeType,
+        dataBase64: audioPart.inlineData.data,
+        raw: data,
+      };
+    } catch (error: any) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        const delayMs = 500 * attempt;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+    }
   }
 
-  const data: any = await response.json();
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const audioPart = parts.find((part: any) => part?.inlineData?.data);
-  if (!audioPart) {
-    throw new Error("Gemini TTS response did not include audio");
-  }
-
-  return {
-    mimeType: audioPart.inlineData.mimeType,
-    dataBase64: audioPart.inlineData.data,
-    raw: data,
-  };
+  throw lastError || new Error("Gemini TTS request failed");
 };
 
 export const qdrant = new QdrantClient({

@@ -2866,6 +2866,7 @@ export class GeminiAiV2Controller {
               }
             })
             .catch((error: any) => {
+              console.log('error', error)
               res.write(
                 `event: error\ndata: ${JSON.stringify({
                   message: "TTS failed",
