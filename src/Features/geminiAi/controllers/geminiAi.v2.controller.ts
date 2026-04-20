@@ -111,6 +111,8 @@ const findLastBoundaryIndex = (text: string) => {
   return lastIndex;
 };
 
+const removeAsterisks = (text: string) => String(text || "").replace(/\*/g, "");
+
 type LiveSetupMessage = {
   setup: {
     model: string;
@@ -242,7 +244,8 @@ const buildGeneralPromptWithHistory = (
 const GENERAL_SPEECH_PROMPT = `
 You are a friendly educational assistant. Answer clearly and conversationally.
 Use the provided MSL context when relevant. If context is missing, answer from general knowledge.
-Do not use HTML, CSS, or markdown. Keep the response under 700 words.
+Do not use HTML, CSS, or markdown. Keep the response under 350 words.
+Never use asterisk (*) in any response.
 `;
 
 const buildGeneralSpeechPromptWithHistory = (
@@ -374,7 +377,7 @@ export class GeminiAiV2Controller {
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
       const response = completion.response;
-      const answer = response.text();
+      const answer = removeAsterisks(response.text());
 
       const usage = response.usageMetadata;
       const promptTokens = usage?.promptTokenCount ?? estimateTokens(prompt);
@@ -440,7 +443,7 @@ export class GeminiAiV2Controller {
         },
       });
     } catch (error: any) {
-      console.log(error);
+      // console.log(error);
       return res.status(500).json({
         success: false,
         message: "System error during Gemini AI general query.",
@@ -970,11 +973,14 @@ export class GeminiAiV2Controller {
         ];
       }
 
+      // console.log('filter', filter)
       const [history, total] = await Promise.all([
         AiUsage.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
         AiUsage.countDocuments(filter),
       ]);
       const totalPages = Math.ceil(total / limit);
+
+      // console.log('history', history)
 
       return res.status(200).json({
         success: true,
@@ -1059,7 +1065,7 @@ export class GeminiAiV2Controller {
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
       const response = completion.response;
-      const answer = response.text();
+      const answer = removeAsterisks(response.text());
 
       const usage = response.usageMetadata;
       const promptTokens = usage?.promptTokenCount ?? estimateTokens(prompt);
@@ -1123,7 +1129,7 @@ export class GeminiAiV2Controller {
         },
       });
     } catch (error: any) {
-      console.log(error);
+      // console.log(error);
       return res.status(500).json({
         success: false,
         message: "System error during Gemini AI general query.",
@@ -1618,7 +1624,7 @@ export class GeminiAiV2Controller {
 
       try {
         for await (const chunk of streamResult.stream) {
-          const content = chunk.text();
+          const content = removeAsterisks(chunk.text());
           if (content) {
             fullAnswer += content;
             res.write(content);
@@ -1802,7 +1808,7 @@ export class GeminiAiV2Controller {
 
       try {
         for await (const chunk of streamResult.stream) {
-          const content = chunk.text();
+          const content = removeAsterisks(chunk.text());
           if (content) {
             fullAnswer += content;
             res.write(content);
@@ -1900,7 +1906,7 @@ export class GeminiAiV2Controller {
       //   },
       // });
     } catch (error: any) {
-      console.log(error);
+      // console.log(error);
       if (res.headersSent) {
         res.end();
         return;
@@ -2033,7 +2039,7 @@ export class GeminiAiV2Controller {
 
       try {
         for await (const chunk of streamResult.stream) {
-          const content = chunk.text();
+          const content = removeAsterisks(chunk.text());
           if (content) {
             fullAnswer += content;
             pendingText += content;
@@ -2268,7 +2274,7 @@ export class GeminiAiV2Controller {
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
 
-      const fullAnswer = completion.response.text();
+      const fullAnswer = removeAsterisks(completion.response.text());
       const { dataBase64, mimeType } = await callGeminiTts({
         text: fullAnswer,
         voiceName: voiceName || undefined,
@@ -2506,7 +2512,7 @@ export class GeminiAiV2Controller {
           const parts = message?.serverContent?.modelTurn?.parts || [];
 
           parts.forEach((part) => {
-            const textChunk = part?.text;
+            const textChunk = removeAsterisks(part?.text || "");
           if (textChunk) {
             fullAnswer += textChunk;
             pendingText += textChunk;
@@ -2825,7 +2831,7 @@ export class GeminiAiV2Controller {
 
       try {
         for await (const chunk of streamResult.stream) {
-          const content = chunk.text();
+          const content = removeAsterisks(chunk.text());
           if (!content) continue;
 
           fullAnswer += content;
@@ -2966,10 +2972,57 @@ export class GeminiAiV2Controller {
     res: Response
   ) {
     try {
+      const requestStartedAt = Date.now();
+      const requestId =
+        (req.headers["x-request-id"] as string | undefined) ||
+        `${requestStartedAt}-${Math.random().toString(36).slice(2, 8)}`;
+      const timerStarts = new Map<string, number>();
+
+      const logTiming = (
+        step: string,
+        type: "start" | "end" | "info",
+        details?: Record<string, unknown>
+      ) => {
+        const elapsedMs = Date.now() - requestStartedAt;
+        const payload: Record<string, unknown> = {
+          requestId,
+          step,
+          type,
+          elapsedMs,
+          ...(details || {}),
+        };
+        // console.log(
+        //   `[gemini-ai-timing][query-general-context-text-stream-final-audio]`,
+        //   payload
+        // );
+      };
+
+      const startStep = (step: string, details?: Record<string, unknown>) => {
+        timerStarts.set(step, Date.now());
+        logTiming(step, "start", details);
+      };
+
+      const endStep = (step: string, details?: Record<string, unknown>) => {
+        const started = timerStarts.get(step);
+        const durationMs = typeof started === "number" ? Date.now() - started : null;
+        logTiming(step, "end", { durationMs, ...(details || {}) });
+      };
+
       const { id } = req["currentUser"] as { id?: string };
       const { question, s3Keys, courseId, lessonId, voiceName } = req.body;
 
+      logTiming("request_received", "info", {
+        hasQuestion: Boolean(question),
+        hasCourseId: Boolean(courseId),
+        hasLessonId: Boolean(lessonId),
+        s3KeysCount: Array.isArray(s3Keys) ? s3Keys.length : 0,
+        hasVoiceName: Boolean(voiceName),
+      });
+
       if (!question) {
+        logTiming("validation_failed", "info", {
+          reason: "Missing required field: question",
+        });
         return res.status(400).json({
           success: false,
           message: "Missing required field: question",
@@ -2977,14 +3030,29 @@ export class GeminiAiV2Controller {
       }
 
       if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        logTiming("validation_failed", "info", {
+          reason: "Missing required field: studentId",
+        });
         return res.status(400).json({
           success: false,
           message: "Missing required field: studentId",
         });
       }
 
+      startStep("limit_check_db");
       const limitCheck = await checkAiLimits(id);
+      endStep("limit_check_db", {
+        allowed: limitCheck.allowed,
+        dailyUsage: limitCheck.dailyUsage,
+        dailyLimit: limitCheck.dailyLimit,
+        monthlyUsage: limitCheck.monthlyUsage,
+        monthlyLimit: limitCheck.monthlyLimit,
+      });
+
       if (!limitCheck.allowed) {
+        logTiming("request_blocked_by_limits", "info", {
+          reason: limitCheck.reason,
+        });
         return res.status(429).json({
           success: false,
           message: limitCheck.reason,
@@ -2997,18 +3065,40 @@ export class GeminiAiV2Controller {
         });
       }
 
+      startStep("embedding_generation");
       const embeddingVector = await embedText(question);
+      endStep("embedding_generation", {
+        embeddingLength: Array.isArray(embeddingVector) ? embeddingVector.length : 0,
+      });
+
+      startStep("vector_format_resolution");
       const vectorFormat = await resolveVectorFormat();
+      endStep("vector_format_resolution", { vectorFormat });
+
+      startStep("content_filter_build");
       const contentFilter = buildContentFilter({
         courseId: courseId || undefined,
         lessonId: lessonId || undefined,
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
       });
-      if (contentFilter) await ensurePayloadIndexesForGeminiCollection();
+      endStep("content_filter_build", {
+        hasContentFilter: Boolean(contentFilter),
+      });
+
+      if (contentFilter) {
+        startStep("qdrant_indexes_ensure");
+        await ensurePayloadIndexesForGeminiCollection();
+        endStep("qdrant_indexes_ensure");
+      }
+
+      startStep("qdrant_search");
       const searchResult = await qdrant.search(COLLECTION_NAME, {
         vector: buildSearchVector(embeddingVector, vectorFormat),
         limit: 5,
         ...(contentFilter && { filter: contentFilter as any }),
+      });
+      endStep("qdrant_search", {
+        resultCount: Array.isArray(searchResult) ? searchResult.length : 0,
       });
 
       const contexts = searchResult.map((point) => point.payload?.text);
@@ -3049,10 +3139,14 @@ export class GeminiAiV2Controller {
         ];
       }
 
+      startStep("history_fetch_db");
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
         .limit(10)
         .lean();
+      endStep("history_fetch_db", {
+        historyItemsCount: Array.isArray(historyItems) ? historyItems.length : 0,
+      });
 
       const historyText = historyItems
         .reverse()
@@ -3073,18 +3167,24 @@ export class GeminiAiV2Controller {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
+      logTiming("sse_headers_set", "info");
 
+      startStep("gemini_stream_generation");
       const streamResult = await geminiChatModel.generateContentStream({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
+      endStep("gemini_stream_generation");
 
       let fullAnswer = "";
       let pendingText = "";
+      let streamChunkCount = 0;
 
       try {
+        startStep("gemini_stream_consumption");
         for await (const chunk of streamResult.stream) {
-          const content = chunk.text();
+          const content = removeAsterisks(chunk.text());
           if (content) {
+            streamChunkCount += 1;
             fullAnswer += content;
             pendingText += content;
             const boundaryIndex = findLastBoundaryIndex(pendingText);
@@ -3100,7 +3200,15 @@ export class GeminiAiV2Controller {
             }
           }
         }
+        endStep("gemini_stream_consumption", {
+          streamChunkCount,
+          streamedTextLength: fullAnswer.length,
+        });
       } catch (streamError: any) {
+        endStep("gemini_stream_consumption", {
+          streamChunkCount,
+          error: streamError?.message || String(streamError),
+        });
         if (res.headersSent) {
           res.write(
             `event: error\ndata: ${JSON.stringify({
@@ -3135,16 +3243,26 @@ export class GeminiAiV2Controller {
         })}\n\n`
       );
 
+      startStep("tts_audio_generation");
       const { dataBase64, mimeType } = await callGeminiTts({
         text: fullAnswer,
         voiceName: voiceName || undefined,
       });
+      endStep("tts_audio_generation", {
+        mimeType,
+        audioBase64Length: dataBase64?.length || 0,
+      });
 
+      startStep("wav_conversion");
       const wavChunks = toWavChunks(
         dataBase64,
         mimeType,
         Number.MAX_SAFE_INTEGER
       );
+      endStep("wav_conversion", {
+        wavChunksCount: wavChunks.length,
+      });
+
       const wavAudio = wavChunks[0] || "";
       res.write(
         `event: audio\ndata: ${JSON.stringify({
@@ -3156,8 +3274,13 @@ export class GeminiAiV2Controller {
 
       res.write(`event: end\ndata: {}\n\n`);
       res.end();
+      logTiming("sse_response_closed", "info", {
+        fullAnswerLength: fullAnswer.length,
+        finalAudioLength: wavAudio.length,
+      });
 
       try {
+        startStep("usage_persist_db");
         const estimatedPromptTokens = estimateTokens(prompt);
         const estimatedCompletionTokens = estimateTokens(fullAnswer);
         const estimatedTotalTokens =
@@ -3178,18 +3301,43 @@ export class GeminiAiV2Controller {
           cost_estimate_usd: 0,
         });
         await aiUsage.save();
+        endStep("usage_persist_db", {
+          estimatedPromptTokens,
+          estimatedCompletionTokens,
+          estimatedTotalTokens,
+        });
 
+        startStep("student_activity_record");
         recordStudentActivity(id, "ai_query", {
           courseId: courseId || undefined,
           lessonId: lessonId || undefined,
         }).catch(() => {});
+        endStep("student_activity_record");
       } catch (persistError) {
         console.error(
           "[gemini-ai] failed to persist usage after SSE end",
           persistError
         );
+        logTiming("post_response_persist_error", "info", {
+          error:
+            persistError instanceof Error
+              ? persistError.message
+              : String(persistError),
+        });
       }
+
+      logTiming("request_completed", "info", {
+        totalDurationMs: Date.now() - requestStartedAt,
+      });
     } catch (error: any) {
+      // console.log(
+      //   `[gemini-ai-timing][query-general-context-text-stream-final-audio]`,
+      //   {
+      //     type: "error",
+      //     step: "request_failed",
+      //     message: error?.message || String(error),
+      //   }
+      // );
       if (res.headersSent) {
         res.write(
           `event: error\ndata: ${JSON.stringify({
@@ -3326,7 +3474,7 @@ export class GeminiAiV2Controller {
       });
 
       const response = completion.response;
-      const answer = response.text();
+      const answer = removeAsterisks(response.text());
 
       const usage = response.usageMetadata;
       const promptTokens = usage?.promptTokenCount ?? estimateTokens(prompt);
