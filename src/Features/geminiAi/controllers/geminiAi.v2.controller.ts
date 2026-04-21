@@ -354,7 +354,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(10)
+        .limit(5)
         .lean();
 
       const historyText = historyItems
@@ -1777,7 +1777,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(10)
+        .limit(5)
         .lean();
 
       const historyText = historyItems
@@ -2007,7 +2007,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(10)
+        .limit(5)
         .lean();
 
       const historyText = historyItems
@@ -2251,7 +2251,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(10)
+        .limit(5)
         .lean();
 
       const historyText = historyItems
@@ -2437,7 +2437,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(10)
+        .limit(5)
         .lean();
 
       const historyText = historyItems
@@ -2753,7 +2753,7 @@ export class GeminiAiV2Controller {
 
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(10)
+        .limit(5)
         .lean();
 
       const historyText = historyItems
@@ -3142,7 +3142,7 @@ export class GeminiAiV2Controller {
       startStep("history_fetch_db");
       const historyItems = await AiUsage.find(historyFilter)
         .sort({ createdAt: -1 })
-        .limit(10)
+        .limit(5)
         .lean();
       endStep("history_fetch_db", {
         historyItemsCount: Array.isArray(historyItems) ? historyItems.length : 0,
