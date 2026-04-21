@@ -299,12 +299,12 @@ export class AdminUserV2Controller {
           message: "Missing id",
         });
       }
-      if (role === Roles.USER) {
-        return res.status(400).json({
-          status: false,
-          message: "Role cannot be USER",
-        });
-      }
+      // if (role === Roles.USER) {
+      //   return res.status(400).json({
+      //     status: false,
+      //     message: "Role cannot be USER",
+      //   });
+      // }
 
       const update = {
         firstname: req.body.firstname,
