@@ -104,7 +104,7 @@ Router.get(
 Router.get(
   "/everything",
   authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
+  authorization([Roles.USER, Roles.STAFF_JUNIOR, Roles.STAFF_SENIOR, Roles.AUDITOR, Roles.ADMIN]),
   (req: Request, res: Response) => {
     CourseController.everything(req, res);
   }
