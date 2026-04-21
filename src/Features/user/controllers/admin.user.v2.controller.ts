@@ -292,7 +292,7 @@ export class AdminUserV2Controller {
 
   static async updateNonUser(req: Request, res: Response) {
     try {
-      const { id, role } = req.body;
+      const { id } = req.body;
       if (!id) {
         return res.status(400).json({
           status: false,
@@ -315,7 +315,7 @@ export class AdminUserV2Controller {
       };
 
       const user = await User.findOneAndUpdate(
-        { _id: id, role: { $ne: Roles.USER } },
+        { _id: id },
         update,
         { new: true }
       );
@@ -323,7 +323,7 @@ export class AdminUserV2Controller {
       if (!user) {
         return res.status(404).json({
           status: false,
-          message: "User not found(student not included)",
+          message: "User not found (both admin and student)",
         });
       }
 
