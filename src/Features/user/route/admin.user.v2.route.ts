@@ -54,15 +54,6 @@ Router.post("/auth", (req: Request, res: Response) => {
   AdminUserV2Controller.nonUserAuth(req, res);
 });
 
-Router.get(
-  "/non-users/:id",
-  authentification,
-  authorization([Roles.ADMIN]),
-  cacheMiddleware({ ttlSeconds: CacheTtl.THIRTY_MINUTES, keyPrefix: "admin:user:non-users:single" }),
-  (req: Request, res: Response) => {
-    AdminUserV2Controller.nonUserSingle(req, res);
-  }
-);
 
 Router.post(
   "/non-users",
@@ -83,6 +74,17 @@ Router.patch(
     AdminUserV2Controller.updateNonUser(req, res);
   }
 );
+
+Router.get(
+  "/non-users/:id",
+  authentification,
+  authorization([Roles.ADMIN]),
+  cacheMiddleware({ ttlSeconds: CacheTtl.THIRTY_MINUTES, keyPrefix: "admin:user:non-users:single" }),
+  (req: Request, res: Response) => {
+    AdminUserV2Controller.nonUserSingle(req, res);
+  }
+);
+
 
 Router.delete(
   "/non-users/:id",
