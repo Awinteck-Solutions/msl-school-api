@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Course from "../schema/course.schema";
 import Enrolled from "../schema/enroll.schema";
 import multer from "multer";
+import { uploadFile } from "../../../helpers/s3";
 
 interface MulterRequest extends Request {
   file?: multer.File;
@@ -1036,42 +1037,59 @@ export class AdminCourseV2Controller {
         error: "Missing fields",
       });
     }
+    const file = req.file;
 
-    const thumbnail = req.file?.path ?? null;
-    try {
-      const course = Course({
-        title,
-        description: desc,
-        thumbnail,
-        link,
-        price,
-        categoryId: category,
-        status,
-        author: authorId,
-      });
-      course
-        .save()
-        .then((result) => {
-          return res.status(201).json({
-            status: true,
-            message: "New Course added",
-            response: result,
-          });
-        })
-        .catch((error) => {
-          return res.status(404).json({
-            status: false,
-            message: "Course adding failed",
-            other: error,
-          });
-        });
-    } catch (error) {
-      return res.status(404).json({
-        status: false,
-        message: "Image too large",
-        other: "Failed to remove previous",
+    if (!file) {
+      return res.status(400).json({
+        error: "Image file is required",
       });
     }
+
+    const result = await uploadFile(file, "course");
+      if (result) {
+        const thumbnail = result.key;
+        try {
+          const course = Course({
+            title,
+            description: desc,
+            thumbnail,
+            link,
+            price,
+            categoryId: category,
+            status,
+            author: authorId,
+          });
+          course
+            .save()
+            .then((result) => {
+              return res.status(201).json({
+                status: true,
+                message: "New Course added",
+                response: result,
+              });
+            })
+            .catch((error) => {
+              return res.status(404).json({
+                status: false,
+                message: "Course adding failed",
+                other: error,
+              });
+            });
+        } catch (error) {
+          return res.status(404).json({
+            status: false,
+            message: "Image too large",
+            other: "Failed to remove previous",
+          });
+        }
+      } else {
+        return res.status(400).json({
+          status: false,
+          message: "Course image upload failed",
+        });
+      }
+    
+    
   }
 
   static async updateCourse(req: Request, res: Response) {
@@ -1173,31 +1191,38 @@ export class AdminCourseV2Controller {
 
     if (!file || !id) {
       return res.status(400).json({
-        error: "Missing fields (id, file)",
+        error: "Missing fields (id, image-file-required)",
       });
     }
-
-    try {
-      const thumbnail = req.file?.path;
-      Course.findOneAndUpdate({ _id: id }, { thumbnail }, { upsert: true })
-        .then(() => {
-          return res.status(201).json({
-            status: true,
-            message: "Course image update",
-            response: thumbnail,
+    const result = await uploadFile(file, "course");
+    if (result) { 
+      try {
+        const thumbnail = result.key;
+        Course.findOneAndUpdate({ _id: id }, { thumbnail }, { upsert: true })
+          .then(() => {
+            return res.status(201).json({
+              status: true,
+              message: "Course image update",
+              response: thumbnail,
+            });
+          })
+          .catch((error) => {
+            return res.status(404).json({
+              status: false,
+              message: "Course image updating failed",
+              other: error,
+            });
           });
-        })
-        .catch((error) => {
-          return res.status(404).json({
-            status: false,
-            message: "Course image updating failed",
-            other: error,
-          });
+      } catch (error) {
+        return res.status(500).json({
+          status: false,
+          message: "System Error",
         });
-    } catch (error) {
-      return res.status(500).json({
+      }
+    } else {
+      return res.status(400).json({
         status: false,
-        message: "System Error",
+        message: "Course image upload failed",
       });
     }
   }
