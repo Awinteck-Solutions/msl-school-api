@@ -180,15 +180,6 @@ Router.delete(
   }
 );
 
-Router.delete(
-  "/delete-video-compressed",
-  authentification,
-  authorization([Roles.ADMIN]),
-  cacheInvalidation(["lesson"]),
-  (req: Request, res: Response) => {
-    AdminLessonV2Controller.deleteVideoCompressed(req, res);
-  }
-);
 
 Router.patch(
   "/update",

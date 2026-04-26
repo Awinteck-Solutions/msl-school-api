@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-import * as fs from "fs";
 import mongoose from "mongoose";
 import multer from "multer";
 import Lesson from "../schema/lesson.schema";
@@ -595,20 +594,12 @@ export class AdminLessonV2Controller {
           ? { pdf3: null }
           : { pdf4: null };
       Lesson.findOneAndUpdate({ _id: lesson_id }, { ...updatePdf })
-        .then((result) => {
-          fs.unlink(filename, (err) => {
-            if (err) {
-              return res.status(200).json({
-                status: false,
-                message: "File doesn't exits anymore",
-              });
-            }
+        .then((result) => { 
             return res.status(200).json({
               status: true,
               message: "Lesson PDF delete success",
               response: result,
-            });
-          });
+            }); 
         })
         .catch((error) => {
           return res.status(404).json({
@@ -651,57 +642,6 @@ export class AdminLessonV2Controller {
             status: true,
             message: "Lesson video delete success",
             response: result,
-          });
-        })
-        .catch((error) => {
-          return res.status(404).json({
-            status: false,
-            message: "Lesson video delete failed",
-            other: error,
-          });
-        });
-    } catch (error) {
-      return res.status(500).json({
-        status: false,
-        message: "System Error",
-      });
-    }
-  }
-
-  static async deleteVideoCompressed(req: Request, res: Response) {
-    const { lesson_id, filename, video_type } = req.body;
-
-    if (!filename || !lesson_id || !video_type) {
-      return res.status(400).json({
-        error: "Missing fields",
-      });
-    }
-
-    try {
-      const updateVideo =
-        video_type == "video_com"
-          ? { video_com: null }
-          : video_type == "video1_com"
-          ? { video1_com: null }
-          : video_type == "video2_com"
-          ? { video2_com: null }
-          : video_type == "video3_com"
-          ? { video3_com: null }
-          : { video4_com: null };
-      Lesson.findOneAndUpdate({ _id: lesson_id }, { ...updateVideo }, { upsert: true })
-        .then((result) => {
-          fs.unlink(filename, (err) => {
-            if (err) {
-              return res.status(200).json({
-                status: false,
-                message: "File doesn't exits anymore",
-              });
-            }
-            return res.status(200).json({
-              status: true,
-              message: "Lesson video delete success",
-              response: result,
-            });
           });
         })
         .catch((error) => {
