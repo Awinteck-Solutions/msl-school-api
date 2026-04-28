@@ -1299,8 +1299,7 @@ export class GeminiAiV2Controller {
       }
 
       const numCards = Math.min(Math.max(Number(count) || 10, 1), 20);
-      // const prompt = `${FLASHCARD_PROMPT(numCards)}\n\nContent:\n\n${contextText}`;
-      const prompt = `${FLASHCARD_PROMPT(10)}\n\nContent:\n\n${contextText}`;
+      const prompt = `${FLASHCARD_PROMPT(numCards)}\n\nContent:\n\n${contextText}`;
       const completion = await geminiChatModel.generateContent({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
@@ -1450,8 +1449,7 @@ export class GeminiAiV2Controller {
       }
 
       const numQ = Math.min(Math.max(Number(numQuestions) || 5, 1), 15);
-      // const prompt = `${QUIZ_PROMPT(numQ)}\n\nContent:\n\n${contextText}`;
-      const prompt = `${QUIZ_PROMPT(10)}\n\nContent:\n\n${contextText}`;
+      const prompt = `${QUIZ_PROMPT(numQ)}\n\nContent:\n\n${contextText}`;
       const completion = await geminiChatModel.generateContent({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
