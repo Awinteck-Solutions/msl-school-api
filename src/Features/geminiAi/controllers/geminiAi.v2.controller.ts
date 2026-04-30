@@ -113,6 +113,35 @@ const findLastBoundaryIndex = (text: string) => {
 
 const removeAsterisks = (text: string) => String(text || "").replace(/\*/g, "");
 
+const normalizeS3Keys = (value: unknown): string[] | undefined => {
+  if (Array.isArray(value)) {
+    const keys = value.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0
+    );
+    return keys.length > 0 ? keys : undefined;
+  }
+
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      const keys = parsed.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0
+      );
+      return keys.length > 0 ? keys : undefined;
+    }
+  } catch {
+    // Multipart form-data may send a plain string instead of JSON.
+  }
+
+  return [trimmed];
+};
+
 type LiveSetupMessage = {
   setup: {
     model: string;
@@ -973,7 +1002,6 @@ export class GeminiAiV2Controller {
         ];
       }
 
-      // console.log('filter', filter)
       const [history, total] = await Promise.all([
         AiUsage.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
         AiUsage.countDocuments(filter),
@@ -3400,6 +3428,7 @@ export class GeminiAiV2Controller {
     try {
       const { id } = req["currentUser"] as { id?: string };
       const { question, courseId, lessonId, s3Keys } = req.body;
+      const normalizedS3Keys = normalizeS3Keys(s3Keys);
       const file = req.file;
 
       if (!question) {
@@ -3442,7 +3471,7 @@ export class GeminiAiV2Controller {
       const contentFilter = buildContentFilter({
         courseId: courseId || undefined,
         lessonId: lessonId || undefined,
-        s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
+        s3Keys: normalizedS3Keys,
       });
       if (contentFilter) await ensurePayloadIndexesForGeminiCollection();
       const searchResult = await qdrant.search(COLLECTION_NAME, {
@@ -3483,6 +3512,9 @@ export class GeminiAiV2Controller {
 
       const aiUsage = new AiUsage({
         student: id,
+        course: courseId || undefined,
+        lesson: lessonId || undefined,
+        s3Keys: normalizedS3Keys,
         question,
         answer,
         prompt_tokens: promptTokens,
