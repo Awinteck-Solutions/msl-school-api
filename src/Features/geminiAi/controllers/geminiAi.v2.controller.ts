@@ -20,8 +20,6 @@ import {
   qdrant,
 } from "./geminiAi.shared";
 import AiUsage from "../../mslAi/schema/aiUsage.schema";
-import FlashCard from "../../flashcard/schema/flashcard.schema";
-import Quiz from "../../quiz/schema/quiz.schema";
 import { recordStudentActivity } from "../../gamification/service/gamification.service";
 
 interface MulterRequest extends Request {
@@ -1280,8 +1278,6 @@ export class GeminiAiV2Controller {
         courseId,
         lessonId,
         count = 10,
-        title,
-        persist = false,
         courseIdForLink,
       } = req.body;
 
@@ -1381,31 +1377,13 @@ export class GeminiAiV2Controller {
         courseId: courseIdForLink || undefined,
       }).catch(() => {});
 
-      let flashcardId: string | null = null;
-      if (persist && flashcardItems.length > 0) {
-        const courseIds =
-          courseIdForLink && mongoose.Types.ObjectId.isValid(courseIdForLink)
-            ? [new mongoose.Types.ObjectId(courseIdForLink)]
-            : [];
-        const doc = await FlashCard.create({
-          title: title || `AI Flashcards ${new Date().toISOString().slice(0, 10)}`,
-          description: "Generated from content by AI tutor.",
-          course: courseIds,
-          students: [],
-          flashcardItems,
-          status: "ACTIVE",
-        });
-        flashcardId = doc._id.toString();
-      }
-
       return res.status(200).json({
         success: true,
         message: "Flashcards generated successfully.",
         response: {
           model: GEMINI_CHAT_MODEL,
           flashcards: flashcardItems,
-          persisted: persist && !!flashcardId,
-          flashcardId: flashcardId ?? undefined,
+          persisted: false,
           limitInfo: {
             dailyUsage: limitCheck.dailyUsage + 1,
             dailyLimit: limitCheck.dailyLimit,
@@ -1430,8 +1408,6 @@ export class GeminiAiV2Controller {
         courseId,
         lessonId,
         numQuestions = 5,
-        title,
-        persist = false,
         courseIdForLink,
       } = req.body;
 
@@ -1551,31 +1527,13 @@ export class GeminiAiV2Controller {
         courseId: courseIdForLink || undefined,
       }).catch(() => {});
 
-      let quizId: string | null = null;
-      if (persist && quizItems.length > 0) {
-        const courseIds =
-          courseIdForLink && mongoose.Types.ObjectId.isValid(courseIdForLink)
-            ? [new mongoose.Types.ObjectId(courseIdForLink)]
-            : [];
-        const doc = await Quiz.create({
-          title: title || `AI Quiz ${new Date().toISOString().slice(0, 10)}`,
-          description: "Generated from content by AI tutor.",
-          course: courseIds,
-          students: [],
-          quiz: quizItems,
-          status: "ACTIVE",
-        });
-        quizId = doc._id.toString();
-      }
-
       return res.status(200).json({
         success: true,
         message: "Quiz generated successfully.",
         response: {
           model: GEMINI_CHAT_MODEL,
           questions: quizItems,
-          persisted: persist && !!quizId,
-          quizId: quizId ?? undefined,
+          persisted: false,
           limitInfo: {
             dailyUsage: limitCheck.dailyUsage + 1,
             dailyLimit: limitCheck.dailyLimit,
