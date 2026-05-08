@@ -1401,33 +1401,33 @@ export class CourseController {
     }
   }
 
-  static async deleteCourse(req: Request, res: Response) {
-    const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
-    try {
-      Course.deleteOne({ _id: id })
-        .then(() => {
-          return res.status(201).json({
-            status: true,
-            message: "Course delete success",
-          });
-        })
-        .catch((error) => {
-          return res.status(404).json({
-            status: false,
-            message: "Course delete failed",
-            other: error,
-          });
-        });
-    } catch (error) {
-      return res.status(500).json({
-        status: false,
-        message: "System Error",
-      });
-    }
-  }
+  // static async deleteCourse(req: Request, res: Response) {
+  //   const { id } = req.params;
+  //   if (!id) {
+  //     return res.status(400).json({ error: "Missing fields" });
+  //   }
+  //   try {
+  //     Course.deleteOne({ _id: id })
+  //       .then(() => {
+  //         return res.status(201).json({
+  //           status: true,
+  //           message: "Course delete success",
+  //         });
+  //       })
+  //       .catch((error) => {
+  //         return res.status(404).json({
+  //           status: false,
+  //           message: "Course delete failed",
+  //           other: error,
+  //         });
+  //       });
+  //   } catch (error) {
+  //     return res.status(500).json({
+  //       status: false,
+  //       message: "System Error",
+  //     });
+  //   }
+  // }
 
   static async updateStatus(req: Request, res: Response) {
     const { id, status } = req.body;

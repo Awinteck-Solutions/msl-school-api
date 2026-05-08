@@ -176,14 +176,14 @@ Router.post(
   }
 );
 
-Router.get(
-  "/delete/:id",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
-  (req: Request, res: Response) => {
-    CourseController.deleteCourse(req, res);
-  }
-);
+// Router.get(
+//   "/delete/:id",
+//   authentification,
+//   authorization([Roles.USER, Roles.ADMIN]),
+//   (req: Request, res: Response) => {
+//     CourseController.deleteCourse(req, res);
+//   }
+// );
 
 Router.post(
   "/update/status",

@@ -1452,7 +1452,7 @@ export class GeminiAiV2Controller {
         });
       }
 
-      const numQ = Math.min(Math.max(Number(numQuestions) || 5, 1), 15);
+      const numQ = Math.min(Math.max(Number(numQuestions) || 5, 1), 25);
       const prompt = `${QUIZ_PROMPT(numQ)}\n\nContent:\n\n${contextText}`;
       const completion = await geminiChatModel.generateContent({
         contents: [{ role: "user", parts: [{ text: prompt }] }],

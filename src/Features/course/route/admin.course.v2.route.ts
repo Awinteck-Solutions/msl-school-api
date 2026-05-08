@@ -49,7 +49,7 @@ Router.get(
   authorization([Roles.ADMIN]),
   cacheMiddleware({ ttlSeconds: CacheTtl.TWO_MINUTES, keyPrefix: "admin:course:admin:single" }),
   (req: Request, res: Response) => {
-    AdminCourseV2Controller.adminSingleV2(req, res);
+    AdminCourseV2Controller.adminV2(req, res);
   }
 );
 
@@ -106,15 +106,15 @@ Router.patch(
   }
 );
 
-Router.delete(
-  "/:id",
-  authentification,
-  authorization([Roles.ADMIN]),
-  cacheInvalidation(["course"]),
-  (req: Request, res: Response) => {
-    AdminCourseV2Controller.deleteCourse(req, res);
-  }
-);
+// Router.delete(
+//   "/:id",
+//   authentification,
+//   authorization([Roles.ADMIN]),
+//   cacheInvalidation(["course"]),
+//   (req: Request, res: Response) => {
+//     AdminCourseV2Controller.deleteCourse(req, res);
+//   }
+// );
 
 Router.patch(
   "/update-status",

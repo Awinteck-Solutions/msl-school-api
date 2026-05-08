@@ -65,6 +65,7 @@
       "start": "node build/app.js",
       "build": "tsc",
       "dev": "nodemon src/app.ts",
+      "change-course-id": "ts-node src/scripts/changeCourseId.ts",
       "type-start": "ts-node src/app.ts",
       "typeorm": "typeorm-ts-node-commonjs"
    }

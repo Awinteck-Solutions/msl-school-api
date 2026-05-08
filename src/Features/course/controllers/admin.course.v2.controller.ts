@@ -582,7 +582,34 @@ export class AdminCourseV2Controller {
             createdAt: 1,
             updatedAt: 1,
             lessons: 1,
-            linkedCourses: 1,
+            linkedCourses: {
+              $map: {
+                input: "$localLinkedCourses",
+                as: "course",
+                in: {
+                  _id: "$$course._id",
+                  title: "$$course.title",
+                  description: "$$course.description",
+                  thumbnail: "$$course.thumbnail",
+                  link: "$$course.link",
+                  price: "$$course.price",
+                  archived: "$$course.archived",
+                  status: "$$course.status",
+                  categoryId: {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: "$linkedCoursesCategories",
+                          as: "cat",
+                          cond: { $eq: ["$$cat._id", "$$course.categoryId"] },
+                        },
+                      },
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
           },
         },
       ]);
@@ -1227,33 +1254,33 @@ export class AdminCourseV2Controller {
     }
   }
 
-  static async deleteCourse(req: Request, res: Response) {
-    const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
-    try {
-      Course.deleteOne({ _id: id })
-        .then(() => {
-          return res.status(201).json({
-            status: true,
-            message: "Course delete success",
-          });
-        })
-        .catch((error) => {
-          return res.status(404).json({
-            status: false,
-            message: "Course delete failed",
-            other: error,
-          });
-        });
-    } catch (error) {
-      return res.status(500).json({
-        status: false,
-        message: "System Error",
-      });
-    }
-  }
+  // static async deleteCourse(req: Request, res: Response) {
+  //   const { id } = req.params;
+  //   if (!id) {
+  //     return res.status(400).json({ error: "Missing fields" });
+  //   }
+  //   try {
+  //     Course.deleteOne({ _id: id })
+  //       .then(() => {
+  //         return res.status(201).json({
+  //           status: true,
+  //           message: "Course delete success",
+  //         });
+  //       })
+  //       .catch((error) => {
+  //         return res.status(404).json({
+  //           status: false,
+  //           message: "Course delete failed",
+  //           other: error,
+  //         });
+  //       });
+  //   } catch (error) {
+  //     return res.status(500).json({
+  //       status: false,
+  //       message: "System Error",
+  //     });
+  //   }
+  // }
 
   static async updateStatus(req: Request, res: Response) {
     const { id, status } = req.body;

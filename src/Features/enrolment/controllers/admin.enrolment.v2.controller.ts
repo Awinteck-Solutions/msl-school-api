@@ -1,11 +1,11 @@
-import { Request, Response } from "express";
+import {Request, Response} from "express";
 import mongoose from "mongoose";
-import { Readable } from "stream";
+import {Readable} from "stream";
 import csvParser = require("csv-parser");
 import Enrolled from "../../course/schema/enroll.schema";
 import multer from "multer";
-import { sendFirebaseNotification } from "../../../helpers/firebase";
-import { isUserNotificationEnabled } from "../../../helpers/notificationSettings";
+import {sendFirebaseNotification} from "../../../helpers/firebase";
+import {isUserNotificationEnabled} from "../../../helpers/notificationSettings";
 import User from "../../user/schema/user.schema";
 import Course from "../../course/schema/course.schema";
 type CsvRow = Record<string, string>;
@@ -43,7 +43,7 @@ const parseCsvEmails = async (buffer: Buffer): Promise<string[]> => {
 
 export class AdminEnrolmentV2Controller {
   static async addOne(req: Request, res: Response) {
-    const { email, courseId } = req.body;
+    const {email, courseId} = req.body;
 
     if (!email || !courseId) {
       return res.status(400).json({
@@ -59,26 +59,31 @@ export class AdminEnrolmentV2Controller {
       .save()
       .then(async (result) => {
         // get course title
-        const course = await Course.findById(courseId).select("title").lean() as any;
-        const student = await User.findOne({ email: email })
+        const course = (await Course.findById(courseId)
+          .select("title")
+          .lean()) as any;
+        const student = await User.findOne({email: email})
           .select("firebase_token notificationSettings")
           .lean();
-        const firebaseToken = (student as any)?.firebase_token as string | undefined;
+        const firebaseToken = (student as any)?.firebase_token as
+          | string
+          | undefined;
         // console.log('student', student)
-        if (!firebaseToken) {
-          return res.status(404).json({
-            status: false,
-            message: "Student firebase token not found",
-          });
+        if (firebaseToken) {
+          if (isUserNotificationEnabled(student as any, "course_alerts")) {
+            sendFirebaseNotification(firebaseToken, {
+              title: "You have been enrolled to a course",
+              body: `You have been enrolled to a course ${course.title}`,
+              data: {
+                type: "enrolment",
+                event: "enrolment_added",
+                course: courseId.toString(),
+                courseTitle: course.title,
+              },
+            });
+          }
         }
-        if (isUserNotificationEnabled(student as any, "course_alerts")) {
-          sendFirebaseNotification(firebaseToken, {
-            title: "You have been enrolled to a course",
-            body: `You have been enrolled to a course ${course.title}`,
-            data: { type: "enrolment", event: "enrolment_added", course: courseId.toString(), courseTitle: course.title },
-          });
-        }
-       
+
         return res.status(201).json({
           status: true,
           message: "New user enrolled added",
@@ -95,14 +100,14 @@ export class AdminEnrolmentV2Controller {
   }
 
   static async deleteOne(req: Request, res: Response) {
-    const { id } = req.params;
+    const {id} = req.params;
     if (!id) {
       return res.status(400).json({
         error: "Missing fields",
       });
     }
 
-    Enrolled.deleteOne({ _id: id })
+    Enrolled.deleteOne({_id: id})
       .then(() => {
         return res.status(201).json({
           status: true,
@@ -119,15 +124,15 @@ export class AdminEnrolmentV2Controller {
   }
 
   static async deleteMany(req: Request, res: Response) {
-    const { ids } = req.body;
+    const {ids} = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: "Please provide an array of IDs" });
+      return res.status(400).json({message: "Please provide an array of IDs"});
     }
 
     const objectIds = ids.map((id: string) => new mongoose.Types.ObjectId(id));
 
-    Enrolled.deleteMany({ _id: { $in: objectIds } })
+    Enrolled.deleteMany({_id: {$in: objectIds}})
       .then(() => {
         return res.status(201).json({
           status: true,
@@ -144,7 +149,7 @@ export class AdminEnrolmentV2Controller {
   }
 
   static async deactivateOne(req: Request, res: Response) {
-    const { id } = req.params;
+    const {id} = req.params;
 
     if (!id) {
       return res.status(400).json({
@@ -152,7 +157,7 @@ export class AdminEnrolmentV2Controller {
       });
     }
 
-    Enrolled.updateOne({ _id: id }, { status: "INACTIVE" })
+    Enrolled.updateOne({_id: id}, {status: "INACTIVE"})
       .then(() => {
         return res.status(201).json({
           status: true,
@@ -169,17 +174,14 @@ export class AdminEnrolmentV2Controller {
   }
 
   static async deactivateMany(req: Request, res: Response) {
-    const { ids } = req.body;
+    const {ids} = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: "Please provide an array of IDs" });
+      return res.status(400).json({message: "Please provide an array of IDs"});
     }
 
     const objectIds = ids.map((id: string) => new mongoose.Types.ObjectId(id));
 
-    Enrolled.updateMany(
-      { _id: { $in: objectIds } },
-      { $set: { status: "INACTIVE" } }
-    )
+    Enrolled.updateMany({_id: {$in: objectIds}}, {$set: {status: "INACTIVE"}})
       .then(() => {
         return res.status(201).json({
           status: true,
@@ -196,14 +198,14 @@ export class AdminEnrolmentV2Controller {
   }
 
   static async update(req: Request, res: Response) {
-    const { id, status, email } = req.body;
+    const {id, status, email} = req.body;
     if (!id || !status || !email) {
       return res.status(400).json({
         error: "Missing fields",
       });
     }
 
-    Enrolled.updateOne({ _id: id }, { status, email }, { upsert: false })
+    Enrolled.updateOne({_id: id}, {status, email}, {upsert: false})
       .then(() => {
         return res.status(201).json({
           status: true,
@@ -221,8 +223,13 @@ export class AdminEnrolmentV2Controller {
 
   static async addMany(req: Request, res: Response) {
     try {
-      const { emails, courseId } = req.body;
-      if (!emails || !courseId || !Array.isArray(emails) || emails.length === 0) {
+      const {emails, courseId} = req.body;
+      if (
+        !emails ||
+        !courseId ||
+        !Array.isArray(emails) ||
+        emails.length === 0
+      ) {
         return res.status(400).json({
           error: "Missing fields",
         });
@@ -235,12 +242,14 @@ export class AdminEnrolmentV2Controller {
 
       const result = await Enrolled.insertMany(enrolled);
 
-      const course = (await Course.findById(courseId).select("title").lean()) as {
+      const course = (await Course.findById(courseId)
+        .select("title")
+        .lean()) as {
         title?: string;
       } | null;
       const courseTitle = course?.title ?? "a course";
 
-      const students = await User.find({ email: { $in: emails } })
+      const students = await User.find({email: {$in: emails}})
         .select("firebase_token notificationSettings")
         .lean();
 
@@ -250,7 +259,8 @@ export class AdminEnrolmentV2Controller {
       }[]) {
         const firebaseToken = student?.firebase_token;
         if (!firebaseToken) continue;
-        if (!isUserNotificationEnabled(student as any, "course_alerts")) continue;
+        if (!isUserNotificationEnabled(student as any, "course_alerts"))
+          continue;
         sendFirebaseNotification(firebaseToken, {
           title: "You have been enrolled to a course",
           body: `You have been enrolled to a course ${courseTitle}`,
@@ -278,7 +288,7 @@ export class AdminEnrolmentV2Controller {
   }
 
   static async addCsv(req: MulterRequest, res: Response) {
-    const { courseId } = req.body;
+    const {courseId} = req.body;
     const file = req.file;
     if (!file || !courseId) {
       return res.status(400).json({
@@ -319,7 +329,7 @@ export class AdminEnrolmentV2Controller {
   }
 
   static async byCourse(req: Request, res: Response) {
-    const { id } = req.params;
+    const {id} = req.params;
     if (!id) {
       return res.status(400).json({
         error: "Missing fields",
@@ -342,7 +352,7 @@ export class AdminEnrolmentV2Controller {
     const totalPages = Math.ceil(total / limit);
 
     Enrolled.aggregate([
-      { $sort: { _id: 1 } },
+      {$sort: {_id: 1}},
       {
         $project: {
           _id: 1,
@@ -366,8 +376,8 @@ export class AdminEnrolmentV2Controller {
           status: "ACTIVE",
         },
       },
-      { $skip: skip },
-      { $limit: limit },
+      {$skip: skip},
+      {$limit: limit},
     ])
       .then((result) => {
         return res.status(200).json({
@@ -407,24 +417,24 @@ export class AdminEnrolmentV2Controller {
   }
 
   static async byUser(req: Request, res: Response) {
-    const { email } = req.params;
+    const {email} = req.params;
     if (!email) {
       return res.status(400).json({
         error: "Missing fields",
       });
     }
 
-    Enrolled.find({ email, status: "ACTIVE" })
+    Enrolled.find({email, status: "ACTIVE"})
       .populate({
         path: "course",
-        populate: { path: "categoryId" },
+        populate: {path: "categoryId"},
       })
       .then((result) => {
         return res.status(200).json({
           status: true,
           message: "Enrolled all User",
           result: result
-            .filter((value) => { 
+            .filter((value) => {
               if (value.course === undefined) return false;
               if (value.course?.status === "ACTIVE") return true;
               return false;
@@ -432,7 +442,7 @@ export class AdminEnrolmentV2Controller {
             .map((value) => value.course),
         });
       })
-      .catch((error) => { 
+      .catch((error) => {
         return res.status(404).json({
           status: false,
           message: "Enrolled users failed",
@@ -442,9 +452,9 @@ export class AdminEnrolmentV2Controller {
 
   static async enrollUserToManyCourses(req: Request, res: Response) {
     try {
-      const { email, courseIds } = req.body;
+      const {email, courseIds} = req.body;
 
-      console.log('courseIds', courseIds)
+      console.log("courseIds", courseIds);
 
       if (!email || !courseIds || !Array.isArray(courseIds)) {
         return res.status(400).json({
@@ -460,13 +470,17 @@ export class AdminEnrolmentV2Controller {
 
       const result = await Enrolled.insertMany(enrollments);
 
-      const student = await User.findOne({ email: email })
+      const student = await User.findOne({email: email})
         .select("firebase_token notificationSettings")
         .lean();
-      const firebaseToken = (student as any)?.firebase_token as string | undefined;
+      const firebaseToken = (student as any)?.firebase_token as
+        | string
+        | undefined;
 
       for (const courseId of courseIds) {
-        const course = await Course.findById(courseId).select("title").lean() as any;
+        const course = (await Course.findById(courseId)
+          .select("title")
+          .lean()) as any;
         if (!course) continue;
         if (!firebaseToken) {
           return res.status(404).json({
@@ -478,7 +492,12 @@ export class AdminEnrolmentV2Controller {
           sendFirebaseNotification(firebaseToken, {
             title: "You have been enrolled to a course",
             body: `You have been enrolled to a course ${course.title}`,
-            data: { type: "enrolment", event: "enrolment_added", course: courseId.toString(), courseTitle: course.title },
+            data: {
+              type: "enrolment",
+              event: "enrolment_added",
+              course: courseId.toString(),
+              courseTitle: course.title,
+            },
           });
         }
       }
@@ -498,7 +517,7 @@ export class AdminEnrolmentV2Controller {
 
   static async unenrollUserFromManyCourses(req: Request, res: Response) {
     try {
-      const { email, courseIds } = req.body;
+      const {email, courseIds} = req.body;
 
       if (!email || !courseIds || !Array.isArray(courseIds)) {
         return res.status(400).json({
@@ -509,7 +528,7 @@ export class AdminEnrolmentV2Controller {
 
       const result = await Enrolled.deleteMany({
         email,
-        course: { $in: courseIds },
+        course: {$in: courseIds},
       });
 
       return res.status(200).json({
