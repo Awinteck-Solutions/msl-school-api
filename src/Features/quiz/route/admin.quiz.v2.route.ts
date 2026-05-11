@@ -203,6 +203,16 @@ Router.patch(
 );
 
 Router.delete(
+  "/course-from-many-quiz",
+  authentification,
+  authorization([Roles.ADMIN]),
+  cacheInvalidation(["quiz", "course"]),
+  (req: Request, res: Response) => {
+    AdminQuizV2Controller.removeCourseFromManyQuiz(req, res);
+  }
+);
+
+Router.delete(
   "/course",
   authentification,
   authorization([Roles.ADMIN]),

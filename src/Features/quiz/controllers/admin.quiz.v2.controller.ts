@@ -623,6 +623,37 @@ export class AdminQuizV2Controller {
       });
   }
 
+  static async removeCourseFromManyQuiz(req: Request, res: Response) {
+    const { ids, course } = req.body;
+    if (!course || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(401).json({
+        status: false,
+        message: "missing fields",
+      });
+    }
+
+    const objectIds = ids.map((id: string) => new mongoose.Types.ObjectId(id));
+
+    Quiz.updateMany(
+      { _id: { $in: objectIds } },
+      { $pull: { course: course } }
+    )
+      .then((result) => {
+        return res.status(201).json({
+          status: true,
+          message: "Quiz course removed success",
+          response: result,
+        });
+      })
+      .catch((error) => {
+        return res.status(404).json({
+          status: false,
+          message: "Quiz course removed failed",
+          other: error,
+        });
+      });
+  }
+
   static async removeCourse(req: Request, res: Response) {
     const { id, course } = req.body;
     if (!id && !course) {
