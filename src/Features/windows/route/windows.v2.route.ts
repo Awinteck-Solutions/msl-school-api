@@ -7,10 +7,9 @@ import { WindowsV2Controller } from "../controllers/windows.v2.controller";
 
 const Router = express.Router();
 
+// Public: desktop app registers device before mobile validates the code.
 Router.post(
   "/generate-code",
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
   (req: Request, res: Response) => {
     WindowsV2Controller.generateCode(req, res);
   }
