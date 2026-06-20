@@ -688,7 +688,7 @@ async function scrollFilteredPoints(
 ): Promise<{ payload?: { text?: string; s3Key?: string; pdfKey?: string; chunkIndex?: number } }[]> {
   const points: { payload?: { text?: string; s3Key?: string; pdfKey?: string; chunkIndex?: number } }[] = [];
   let offset: string | number | null | undefined = undefined;
-  const limit = 500;
+  const limit = 100;
   while (true) {
     const scrollRes = await qdrant.scroll(COLLECTION_NAME, {
       limit,
@@ -754,7 +754,8 @@ export const buildContentFilter = (options: {
   return { must };
 };
 
-const MAX_CONTEXT_TOKENS = 30000;
+// const MAX_CONTEXT_TOKENS = 30000;
+const MAX_CONTEXT_TOKENS = 10000;
 
 /** Retrieve concatenated text from Qdrant for the given filter (e.g. by s3Keys). Ordered by (s3Key/pdfKey, chunkIndex). */
 export const getContextFromQdrant = async (options: {
@@ -819,6 +820,105 @@ export const getContextFromQdrant = async (options: {
   return parts.join("\n\n");
 };
 
+// export const checkAiLimits = async (studentId: string) => {
+//   try {
+//     const user = await User.findById(studentId);
+//     if (!user) {
+//       return {
+//         allowed: false,
+//         reason: "User not found",
+//       };
+//     }
+
+//     let globalLimits = await GlobalAiLimit.findOne({});
+//     if (!globalLimits) {
+//       globalLimits = await GlobalAiLimit.create({
+//         dailyLimit: 10,
+//         monthlyLimit: 100,
+//         description: "Default global AI limits",
+//       });
+//     }
+
+//     const dailyLimit = user.ai_limit?.dailyLimit || globalLimits.dailyLimit;
+//     const monthlyLimit =
+//       user.ai_limit?.monthlyLimit || globalLimits.monthlyLimit;
+
+//     if (user.ai_limit && user.ai_limit.isActive === false) {
+//       return {
+//         allowed: false,
+//         reason: "AI access is disabled for this user",
+//       };
+//     }
+
+//     const today = new Date();
+//     today.setHours(0, 0, 0, 0);
+//     const tomorrow = new Date(today);
+//     tomorrow.setDate(tomorrow.getDate() + 1);
+
+//     const dailyUsage = await AiUsage.countDocuments({
+//       student: studentId,
+//       createdAt: {
+//         $gte: today,
+//         $lt: tomorrow,
+//       },
+//     });
+
+//     if (dailyUsage >= dailyLimit) {
+//       return {
+//         allowed: false,
+//         reason: `Daily limit of ${dailyLimit} queries exceeded`,
+//         dailyUsage,
+//         dailyLimit,
+//       };
+//     }
+
+//     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+//     const endOfMonth = new Date(
+//       today.getFullYear(),
+//       today.getMonth() + 1,
+//       0,
+//       23,
+//       59,
+//       59,
+//       999
+//     );
+
+//     const monthlyUsage = await AiUsage.countDocuments({
+//       student: studentId,
+//       createdAt: {
+//         $gte: startOfMonth,
+//         $lte: endOfMonth,
+//       },
+//     });
+
+//     if (monthlyUsage >= monthlyLimit) {
+//       return {
+//         allowed: false,
+//         reason: `Monthly limit of ${monthlyLimit} queries exceeded`,
+//         monthlyUsage,
+//         monthlyLimit,
+//       };
+//     }
+
+//     return {
+//       allowed: true,
+//       dailyUsage,
+//       dailyLimit,
+//       monthlyUsage,
+//       monthlyLimit,
+//       remainingDaily: dailyLimit - dailyUsage,
+//       remainingMonthly: monthlyLimit - monthlyUsage,
+//     };
+//   } catch (error) {
+//     return {
+//       allowed: false,
+//       reason: "Error checking limits",
+//     };
+//   }
+// };
+
+
+
 export const checkAiLimits = async (studentId: string) => {
   try {
     const user = await User.findById(studentId);
@@ -829,19 +929,6 @@ export const checkAiLimits = async (studentId: string) => {
       };
     }
 
-    let globalLimits = await GlobalAiLimit.findOne({});
-    if (!globalLimits) {
-      globalLimits = await GlobalAiLimit.create({
-        dailyLimit: 10,
-        monthlyLimit: 100,
-        description: "Default global AI limits",
-      });
-    }
-
-    const dailyLimit = user.ai_limit?.dailyLimit || globalLimits.dailyLimit;
-    const monthlyLimit =
-      user.ai_limit?.monthlyLimit || globalLimits.monthlyLimit;
-
     if (user.ai_limit && user.ai_limit.isActive === false) {
       return {
         allowed: false,
@@ -849,18 +936,43 @@ export const checkAiLimits = async (studentId: string) => {
       };
     }
 
+    // Use findOneAndUpdate with upsert to avoid race conditions
+    // if checkAiLimits is ever called concurrently before a doc exists
+    const globalLimits = await GlobalAiLimit.findOneAndUpdate(
+      {},
+      {
+        $setOnInsert: {
+          dailyLimit: 10,
+          monthlyLimit: 100,
+          description: "Default global AI limits",
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    const dailyLimit = user.ai_limit?.dailyLimit || globalLimits.dailyLimit;
+    const monthlyLimit =
+      user.ai_limit?.monthlyLimit || globalLimits.monthlyLimit;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const dailyUsage = await AiUsage.countDocuments({
-      student: studentId,
-      createdAt: {
-        $gte: today,
-        $lt: tomorrow,
-      },
-    });
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const startOfNextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+
+    // Run both counts in parallel instead of sequentially
+    const [dailyUsage, monthlyUsage] = await Promise.all([
+      AiUsage.countDocuments({
+        student: studentId,
+        createdAt: { $gte: today, $lt: tomorrow },
+      }),
+      AiUsage.countDocuments({
+        student: studentId,
+        createdAt: { $gte: startOfMonth, $lt: startOfNextMonth },
+      }),
+    ]);
 
     if (dailyUsage >= dailyLimit) {
       return {
@@ -870,25 +982,6 @@ export const checkAiLimits = async (studentId: string) => {
         dailyLimit,
       };
     }
-
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(
-      today.getFullYear(),
-      today.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999
-    );
-
-    const monthlyUsage = await AiUsage.countDocuments({
-      student: studentId,
-      createdAt: {
-        $gte: startOfMonth,
-        $lte: endOfMonth,
-      },
-    });
 
     if (monthlyUsage >= monthlyLimit) {
       return {

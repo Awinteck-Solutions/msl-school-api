@@ -1167,9 +1167,10 @@ export class GeminiAiV2Controller {
   static async summarize(req: Request, res: Response) {
     try {
       const { s3Keys, courseId, lessonId } = req.body;
-      const {id} = req['currentUser'];
+      const { id } = req['currentUser'];
+      // console.log('reqcurrentUser', req['currentUser'])
  
-
+      console.time("summarize");
       const hasScope =
         (Array.isArray(s3Keys) && s3Keys.length > 0) || courseId || lessonId;
       if (!hasScope) {
@@ -1180,6 +1181,7 @@ export class GeminiAiV2Controller {
         });
       }
 
+      console.time("checkAiLimits");
       const limitCheck = await checkAiLimits(id);
       if (!limitCheck.allowed) {
         return res.status(429).json({
@@ -1193,6 +1195,8 @@ export class GeminiAiV2Controller {
           },
         });
       }
+      console.timeEnd("checkAiLimits");
+      console.time("getContextFromQdrant");
       const contextText = await getContextFromQdrant({
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
         courseId: courseId ? String(courseId).trim() : undefined,
@@ -1206,14 +1210,17 @@ export class GeminiAiV2Controller {
             "No content found for the given scope (s3Keys/courseId/lessonId). Ensure content is indexed in Qdrant.",
         });
       }
+      console.timeEnd("getContextFromQdrant")
+      console.log('contextText.trim().length', contextText.trim().length)
 
       const prompt = `${SUMMARIZE_SYSTEM_PROMPT}\n\nContent to summarize:\n\n${contextText}`;
+      console.time("geminiChatModel.generateContent");
       const completion = await geminiChatModel.generateContent({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
       const response = completion.response;
       const summary = response.text();
-
+      console.timeEnd("geminiChatModel.generateContent");
       const usage = response.usageMetadata;
       const promptTokens = usage?.promptTokenCount ?? estimateTokens(prompt);
       const completionTokens =
@@ -1221,6 +1228,7 @@ export class GeminiAiV2Controller {
       const totalTokens =
         usage?.totalTokenCount ?? promptTokens + completionTokens;
 
+      console.time("AiUsage");
       await new AiUsage({
         student: id,
         course: courseId || undefined,
@@ -1239,7 +1247,7 @@ export class GeminiAiV2Controller {
         courseId: courseId || undefined,
         lessonId: lessonId || undefined,
       }).catch(() => {});
-
+      console.timeEnd("AiUsage"); 
       return res.status(200).json({
         success: true,
         message: "Summary generated successfully.",

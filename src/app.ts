@@ -52,7 +52,7 @@ connectToDatabase().then(() => {
     startStreakReminderCron({
         cronExpression: process.env.STREAK_REMINDER_CRON || "00 18 * * *",
     });
-    server.listen(process.env.PORT || 3000, ()=> console.log(`Server running on port ${process.env.PORT}`))
+    server.listen(process.env.PORT || 3000, ()=> console.log(`Server running on port ${process.env.PORT} ✅`))
 }).catch((error) => {
     console.log('error :>> ', error);
 })
