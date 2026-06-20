@@ -12,6 +12,8 @@ const { PDFParse } = require("pdf-parse");
 import User from "../../user/schema/user.schema";
 import GlobalAiLimit from "../../mslAi/schema/globalAiLimit.schema";
 import AiUsage from "../../mslAi/schema/aiUsage.schema";
+import Lesson from "../../lesson/schema/lesson.schema";
+import mongoose from "mongoose";
 
 export const COLLECTION_NAME = "gemini_ai";
 export const GEMINI_CHAT_MODEL =
@@ -184,8 +186,8 @@ export const callGeminiTts = async (params: {
 };
 
 export const qdrant = new QdrantClient({
-  url: process.env.QDRANT_URL_PROD ,
-  apiKey: process.env.QDRANT_API_KEY_PROD,
+  url: process.env.QDRANT_URL_PROD || process.env.QDRANT_URL || "http://localhost:6333",
+  apiKey: process.env.QDRANT_API_KEY_PROD || process.env.QDRANT_API_KEY,
 });
 
 const streamToBuffer = async (stream: Readable | Uint8Array | Buffer) => {
@@ -662,6 +664,57 @@ export const embedText = async (text: string) => {
   return result.embedding.values;
 };
 
+/** Align client/API paths with keys stored during lesson processing. */
+export function normalizeStorageKey(key: string): string {
+  let k = (key || "").trim().replace(/\\/g, "/").replace(/^\//, "");
+  k = k.replace(/^public\/res\/lesson\/?/i, "");
+  k = k.replace(/^public\/res\//i, "");
+  return k;
+}
+
+function normalizeScrollOffset(next: unknown): string | number | null {
+  if (next === undefined || next === null) return null;
+  if (typeof next === "string" || typeof next === "number") return next;
+  if (typeof next === "object") {
+    const record = next as Record<string, unknown>;
+    if (typeof record.uuid === "string") return record.uuid;
+    if (typeof record.num === "number") return record.num;
+  }
+  return null;
+}
+
+async function scrollFilteredPoints(
+  filter: Record<string, unknown> | undefined
+): Promise<{ payload?: { text?: string; s3Key?: string; pdfKey?: string; chunkIndex?: number } }[]> {
+  const points: { payload?: { text?: string; s3Key?: string; pdfKey?: string; chunkIndex?: number } }[] = [];
+  let offset: string | number | null | undefined = undefined;
+  const limit = 500;
+  while (true) {
+    const scrollRes = await qdrant.scroll(COLLECTION_NAME, {
+      limit,
+      offset,
+      with_payload: true,
+      with_vector: false,
+      ...(filter && { filter: filter as any }),
+    });
+    points.push(...(scrollRes.points || []));
+    offset = normalizeScrollOffset(scrollRes.next_page_offset);
+    if (offset == null) break;
+  }
+  return points;
+}
+
+async function lessonIdsForCourse(courseId: string): Promise<string[]> {
+  if (!mongoose.Types.ObjectId.isValid(courseId)) return [];
+  const oid = new mongoose.Types.ObjectId(courseId);
+  const lessons = await Lesson.find({
+    $or: [{ course: oid }, { "linkedCourses.course": oid }],
+  })
+    .select("_id")
+    .lean();
+  return lessons.map((l) => String((l as { _id: mongoose.Types.ObjectId })._id));
+}
+
 /** Build Qdrant filter for scoped content (s3Keys, courseId, lessonId). PDF points use pdfKey; video points use s3Key. */
 export const buildContentFilter = (options: {
   s3Keys?: string[];
@@ -669,24 +722,33 @@ export const buildContentFilter = (options: {
   lessonId?: string;
 }): Record<string, unknown> | undefined => {
   const must: Record<string, unknown>[] = [];
-  if (options.s3Keys?.length) {
+  const courseId = options.courseId ? String(options.courseId).trim() : undefined;
+  const lessonId = options.lessonId ? String(options.lessonId).trim() : undefined;
+  const s3Keys = options.s3Keys?.length
+    ? options.s3Keys.map((k) => normalizeStorageKey(k)).filter(Boolean)
+    : undefined;
+
+  // Only narrow by file when a lesson (or file-only scope) is explicitly targeted.
+  const useS3Keys = Boolean(s3Keys?.length && (lessonId || !courseId));
+
+  if (useS3Keys && s3Keys) {
     must.push({
       should: [
-        { key: "s3Key", match: { any: options.s3Keys } },
-        { key: "pdfKey", match: { any: options.s3Keys } },
+        { key: "s3Key", match: { any: s3Keys } },
+        { key: "pdfKey", match: { any: s3Keys } },
       ],
     });
   }
-  if (options.courseId) {
+  if (courseId) {
     must.push({
       should: [
-        { key: "courseId", match: { value: options.courseId } },
-        { key: "courseIds", match: { any: [options.courseId] } },
+        { key: "courseId", match: { value: courseId } },
+        { key: "courseIds", match: { any: [courseId] } },
       ],
     });
   }
-  if (options.lessonId) {
-    must.push({ key: "lessonId", match: { value: options.lessonId } });
+  if (lessonId) {
+    must.push({ key: "lessonId", match: { value: lessonId } });
   }
   if (must.length === 0) return undefined;
   return { must };
@@ -701,32 +763,46 @@ export const getContextFromQdrant = async (options: {
   lessonId?: string;
   maxTokens?: number;
 }): Promise<string> => {
-  const filter = buildContentFilter({
+  const scoped = {
     s3Keys: options.s3Keys,
-    courseId: options.courseId,
-    lessonId: options.lessonId,
-  });
+    courseId: options.courseId ? String(options.courseId).trim() : undefined,
+    lessonId: options.lessonId ? String(options.lessonId).trim() : undefined,
+  };
+
+  let filter = buildContentFilter(scoped);
   if (filter) await ensurePayloadIndexesForGeminiCollection();
-  const maxTokens = options.maxTokens ?? MAX_CONTEXT_TOKENS;
-  const points: { payload?: { text?: string; s3Key?: string; pdfKey?: string; chunkIndex?: number } }[] = [];
-  let offset: string | number | null = null;
-  const limit = 500;
-  while (true) {
-    const scrollRes = await qdrant.scroll(COLLECTION_NAME, {
-      limit,
-      offset,
-      with_payload: true,
-      with_vector: false,
-      ...(filter && { filter: filter as any }),
+
+  let points = await scrollFilteredPoints(filter);
+
+  // Lesson + mismatched file key: fall back to whole lesson.
+  if (
+    points.length === 0 &&
+    scoped.lessonId &&
+    scoped.s3Keys?.length
+  ) {
+    filter = buildContentFilter({
+      courseId: scoped.courseId,
+      lessonId: scoped.lessonId,
     });
-    points.push(...(scrollRes.points || []));
-    const next = scrollRes.next_page_offset;
-    offset =
-      next !== undefined && next !== null && typeof next !== "object"
-        ? next
-        : null;
-    if (offset == null) break;
+    points = await scrollFilteredPoints(filter);
   }
+
+  // Course scope with no courseId payload on vectors (legacy): match lesson IDs from Mongo.
+  if (
+    points.length === 0 &&
+    scoped.courseId &&
+    !scoped.lessonId
+  ) {
+    const lessonIds = await lessonIdsForCourse(scoped.courseId);
+    if (lessonIds.length > 0) {
+      filter = {
+        must: [{ key: "lessonId", match: { any: lessonIds } }],
+      };
+      points = await scrollFilteredPoints(filter);
+    }
+  }
+
+  const maxTokens = options.maxTokens ?? MAX_CONTEXT_TOKENS;
   const byKey = (p: (typeof points)[0]) =>
     (p.payload?.s3Key ?? p.payload?.pdfKey ?? "") + "_" + (p.payload?.chunkIndex ?? 0);
   points.sort((a, b) => byKey(a).localeCompare(byKey(b)));

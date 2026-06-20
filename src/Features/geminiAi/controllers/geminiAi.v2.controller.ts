@@ -1193,17 +1193,11 @@ export class GeminiAiV2Controller {
           },
         });
       }
-      // console.log('courseId', courseId)
-      // console.log('lessonId', lessonId)
-      // console.log('s3Keys', s3Keys)
-
       const contextText = await getContextFromQdrant({
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        courseId: courseId || undefined,
-        lessonId: lessonId || undefined,
+        courseId: courseId ? String(courseId).trim() : undefined,
+        lessonId: lessonId ? String(lessonId).trim() : undefined,
       });
-
-      // console.log('contextText.trim().length ', contextText.trim().length )
 
       if (!contextText || contextText.trim().length < 1) {
         return res.status(400).json({
@@ -1310,8 +1304,8 @@ export class GeminiAiV2Controller {
 
       const contextText = await getContextFromQdrant({
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        courseId: courseId || undefined,
-        lessonId: lessonId || undefined,
+        courseId: courseId ? String(courseId).trim() : undefined,
+        lessonId: lessonId ? String(lessonId).trim() : undefined,
       });
 
       if (!contextText || contextText.trim().length < 50) {
@@ -1440,8 +1434,8 @@ export class GeminiAiV2Controller {
 
       const contextText = await getContextFromQdrant({
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        courseId: courseId || undefined,
-        lessonId: lessonId || undefined,
+        courseId: courseId ? String(courseId).trim() : undefined,
+        lessonId: lessonId ? String(lessonId).trim() : undefined,
       });
 
       if (!contextText || contextText.trim().length < 50) {
