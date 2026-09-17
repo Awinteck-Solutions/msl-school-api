@@ -14,8 +14,11 @@ import GlobalAiLimit from "../../mslAi/schema/globalAiLimit.schema";
 import AiUsage from "../../mslAi/schema/aiUsage.schema";
 import Lesson from "../../lesson/schema/lesson.schema";
 import mongoose from "mongoose";
+import SubscriptionPlan from "../../subscription/schema/subscriptionPlan.schema";
 
 export const COLLECTION_NAME = "gemini_ai";
+export const SUBSCRIPTION_COLLECTION_NAME =
+  process.env.GEMINI_SUBSCRIPTION_COLLECTION || "gemini_ai_subscription";
 export const GEMINI_CHAT_MODEL =
   process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
 export const GEMINI_EMBEDDING_MODEL =
@@ -623,16 +626,38 @@ const PAYLOAD_INDEX_KEYS = [
   "lessonId",
   "s3Key",
   "pdfKey",
+  "resourceId",
 ] as const;
 
 /**
  * Ensure keyword payload indexes exist for the Gemini collection so filter queries (courseId, lessonId, s3Key, pdfKey) work.
  * Idempotent: safe to call multiple times; ignores "already exists" errors.
  */
-export const ensurePayloadIndexesForGeminiCollection = async (): Promise<void> => {
+export const ensureQdrantCollection = async (
+  collectionName: string = COLLECTION_NAME
+): Promise<void> => {
+  try {
+    await qdrant.createCollection(collectionName, {
+      vectors: buildCollectionVectorConfig(),
+    });
+  } catch (error: any) {
+    if (
+      error.status === 409 ||
+      error.message?.includes("already exists") ||
+      error.data?.status?.error?.includes("already exists")
+    ) {
+      return;
+    }
+    throw error;
+  }
+};
+
+export const ensurePayloadIndexesForGeminiCollection = async (
+  collectionName: string = COLLECTION_NAME
+): Promise<void> => {
   for (const fieldName of PAYLOAD_INDEX_KEYS) {
     try {
-      await qdrant.createPayloadIndex(COLLECTION_NAME, {
+      await qdrant.createPayloadIndex(collectionName, {
         field_name: fieldName,
         field_schema: "keyword",
         wait: true,
@@ -684,13 +709,14 @@ function normalizeScrollOffset(next: unknown): string | number | null {
 }
 
 async function scrollFilteredPoints(
-  filter: Record<string, unknown> | undefined
+  filter: Record<string, unknown> | undefined,
+  collectionName: string = COLLECTION_NAME
 ): Promise<{ payload?: { text?: string; s3Key?: string; pdfKey?: string; chunkIndex?: number } }[]> {
   const points: { payload?: { text?: string; s3Key?: string; pdfKey?: string; chunkIndex?: number } }[] = [];
   let offset: string | number | null | undefined = undefined;
   const limit = 100;
   while (true) {
-    const scrollRes = await qdrant.scroll(COLLECTION_NAME, {
+    const scrollRes = await qdrant.scroll(collectionName, {
       limit,
       offset,
       with_payload: true,
@@ -720,16 +746,20 @@ export const buildContentFilter = (options: {
   s3Keys?: string[];
   courseId?: string;
   lessonId?: string;
+  resourceId?: string;
 }): Record<string, unknown> | undefined => {
   const must: Record<string, unknown>[] = [];
   const courseId = options.courseId ? String(options.courseId).trim() : undefined;
   const lessonId = options.lessonId ? String(options.lessonId).trim() : undefined;
+  const resourceId = options.resourceId
+    ? String(options.resourceId).trim()
+    : undefined;
   const s3Keys = options.s3Keys?.length
     ? options.s3Keys.map((k) => normalizeStorageKey(k)).filter(Boolean)
     : undefined;
 
   // Only narrow by file when a lesson (or file-only scope) is explicitly targeted.
-  const useS3Keys = Boolean(s3Keys?.length && (lessonId || !courseId));
+  const useS3Keys = Boolean(s3Keys?.length && (lessonId || resourceId || !courseId));
 
   if (useS3Keys && s3Keys) {
     must.push({
@@ -750,6 +780,9 @@ export const buildContentFilter = (options: {
   if (lessonId) {
     must.push({ key: "lessonId", match: { value: lessonId } });
   }
+  if (resourceId) {
+    must.push({ key: "resourceId", match: { value: resourceId } });
+  }
   if (must.length === 0) return undefined;
   return { must };
 };
@@ -758,49 +791,98 @@ export const buildContentFilter = (options: {
 const MAX_CONTEXT_TOKENS = 10000;
 
 /** Retrieve concatenated text from Qdrant for the given filter (e.g. by s3Keys). Ordered by (s3Key/pdfKey, chunkIndex). */
+export type AiCollectionSearchTarget = {
+  name: string;
+  filter?: Record<string, unknown>;
+};
+
+export const searchAiCollections = async (options: {
+  collections: AiCollectionSearchTarget[];
+  embeddingVector: number[];
+  limit?: number;
+}): Promise<Array<{ payload?: any; score?: number }>> => {
+  const limit = options.limit ?? 5;
+  const vectorFormat = await resolveVectorFormat();
+  const vector = buildSearchVector(options.embeddingVector, vectorFormat);
+  const perCollection = Math.max(limit, 5);
+
+  const results = await Promise.all(
+    options.collections.map(async (collection) => {
+      await ensureQdrantCollection(collection.name);
+      await ensurePayloadIndexesForGeminiCollection(collection.name);
+      return qdrant.search(collection.name, {
+        vector,
+        limit: perCollection,
+        ...(collection.filter && { filter: collection.filter as any }),
+      });
+    })
+  );
+
+  return results
+    .flat()
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, limit);
+};
+
 export const getContextFromQdrant = async (options: {
   s3Keys?: string[];
   courseId?: string;
   lessonId?: string;
+  resourceId?: string;
   maxTokens?: number;
+  collections?: string[];
 }): Promise<string> => {
   const scoped = {
     s3Keys: options.s3Keys,
     courseId: options.courseId ? String(options.courseId).trim() : undefined,
     lessonId: options.lessonId ? String(options.lessonId).trim() : undefined,
+    resourceId: options.resourceId ? String(options.resourceId).trim() : undefined,
   };
+  const collections =
+    options.collections && options.collections.length > 0
+      ? options.collections
+      : [COLLECTION_NAME];
 
   let filter = buildContentFilter(scoped);
-  if (filter) await ensurePayloadIndexesForGeminiCollection();
+  const points: {
+    payload?: { text?: string; s3Key?: string; pdfKey?: string; chunkIndex?: number };
+  }[] = [];
 
-  let points = await scrollFilteredPoints(filter);
+  for (const collectionName of collections) {
+    if (filter) await ensurePayloadIndexesForGeminiCollection(collectionName);
+    let collectionPoints = await scrollFilteredPoints(filter, collectionName);
 
-  // Lesson + mismatched file key: fall back to whole lesson.
-  if (
-    points.length === 0 &&
-    scoped.lessonId &&
-    scoped.s3Keys?.length
-  ) {
-    filter = buildContentFilter({
-      courseId: scoped.courseId,
-      lessonId: scoped.lessonId,
-    });
-    points = await scrollFilteredPoints(filter);
-  }
-
-  // Course scope with no courseId payload on vectors (legacy): match lesson IDs from Mongo.
-  if (
-    points.length === 0 &&
-    scoped.courseId &&
-    !scoped.lessonId
-  ) {
-    const lessonIds = await lessonIdsForCourse(scoped.courseId);
-    if (lessonIds.length > 0) {
-      filter = {
-        must: [{ key: "lessonId", match: { any: lessonIds } }],
-      };
-      points = await scrollFilteredPoints(filter);
+    if (
+      collectionPoints.length === 0 &&
+      scoped.lessonId &&
+      scoped.s3Keys?.length
+    ) {
+      const lessonFilter = buildContentFilter({
+        courseId: scoped.courseId,
+        lessonId: scoped.lessonId,
+      });
+      collectionPoints = await scrollFilteredPoints(lessonFilter, collectionName);
     }
+
+    if (
+      collectionPoints.length === 0 &&
+      scoped.courseId &&
+      !scoped.lessonId &&
+      collectionName === COLLECTION_NAME
+    ) {
+      const lessonIds = await lessonIdsForCourse(scoped.courseId);
+      if (lessonIds.length > 0) {
+        const lessonIdFilter = {
+          must: [{ key: "lessonId", match: { any: lessonIds } }],
+        };
+        collectionPoints = await scrollFilteredPoints(
+          lessonIdFilter,
+          collectionName
+        );
+      }
+    }
+
+    points.push(...collectionPoints);
   }
 
   const maxTokens = options.maxTokens ?? MAX_CONTEXT_TOKENS;
@@ -1005,6 +1087,111 @@ export const checkAiLimits = async (studentId: string) => {
     return {
       allowed: false,
       reason: "Error checking limits",
+    };
+  }
+};
+
+export const checkSubscriptionAiLimits = async (studentId: string) => {
+  try {
+    const user = await User.findById(studentId);
+    if (!user) {
+      return {
+        allowed: false,
+        reason: "User not found",
+      };
+    }
+
+    if (user.ai_limit && user.ai_limit.isActive === false) {
+      return {
+        allowed: false,
+        reason: "AI access is disabled for this user",
+      };
+    }
+
+    const plan = await SubscriptionPlan.findOneAndUpdate(
+      {},
+      {
+        $setOnInsert: {
+          amount: 0,
+          currency: "NGN",
+          intervalDays: 30,
+          gracePeriodDays: 7,
+          reminderDaysBeforeExpiry: 3,
+          dailyAiLimit: 10,
+          monthlyAiLimit: 100,
+          isActive: false,
+          description:
+            "Monthly AI subscription for users without course enrollment",
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    const dailyLimit = plan.dailyAiLimit;
+    const monthlyLimit = plan.monthlyAiLimit;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const startOfNextMonth = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      1
+    );
+
+    const usageFilter = {
+      student: studentId,
+      source: "subscription",
+    };
+
+    const [dailyUsage, monthlyUsage] = await Promise.all([
+      AiUsage.countDocuments({
+        ...usageFilter,
+        createdAt: { $gte: today, $lt: tomorrow },
+      }),
+      AiUsage.countDocuments({
+        ...usageFilter,
+        createdAt: { $gte: startOfMonth, $lt: startOfNextMonth },
+      }),
+    ]);
+
+    if (dailyUsage >= dailyLimit) {
+      return {
+        allowed: false,
+        reason: `Subscription daily limit of ${dailyLimit} queries exceeded`,
+        dailyUsage,
+        dailyLimit,
+        monthlyUsage,
+        monthlyLimit,
+      };
+    }
+
+    if (monthlyUsage >= monthlyLimit) {
+      return {
+        allowed: false,
+        reason: `Subscription monthly limit of ${monthlyLimit} queries exceeded`,
+        dailyUsage,
+        dailyLimit,
+        monthlyUsage,
+        monthlyLimit,
+      };
+    }
+
+    return {
+      allowed: true,
+      dailyUsage,
+      dailyLimit,
+      monthlyUsage,
+      monthlyLimit,
+      remainingDaily: dailyLimit - dailyUsage,
+      remainingMonthly: monthlyLimit - monthlyUsage,
+    };
+  } catch (error) {
+    return {
+      allowed: false,
+      reason: "Error checking subscription AI limits",
     };
   }
 };

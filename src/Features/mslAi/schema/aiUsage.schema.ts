@@ -27,6 +27,11 @@ const aiUsageSchema = new Schema(
       enum: ["chat", "generate-quiz", "summarize", "generate-flashcards"],
       required: false,
     },
+    source: {
+      type: String,
+      enum: ["course", "subscription"],
+      default: "course",
+    },
     question: { type: String },
     answer: { type: String },
     prompt_tokens: { type: Number },
@@ -38,6 +43,8 @@ const aiUsageSchema = new Schema(
   },
   { timestamps: true }
 );
+
+aiUsageSchema.index({ student: 1, source: 1, createdAt: -1 });
 
 const AiUsage = mongoose.model("AiUsage", aiUsageSchema);
 

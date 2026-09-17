@@ -5,6 +5,11 @@ import { v4 as uuidv4 } from "uuid";
 import Course from "../../course/schema/course.schema";
 import Enroll from "../../course/schema/enroll.schema";
 import Payment from "../schema/payment.schema";
+import SubscriptionInvoice from "../../subscription/schema/subscriptionInvoice.schema";
+import {
+  applySuccessfulInvoicePayment,
+} from "../../subscription/controllers/subscription.service";
+import { SubscriptionInvoiceStatus } from "../../subscription/enums/subscription.enum";
 
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
 
@@ -284,7 +289,26 @@ export class PaymentV2Controller {
 
       const payment = await Payment.findOne({ reference });
       if (!payment) {
-        return res.status(200).json({ status: true, message: "Payment not found" });
+        const invoice = await SubscriptionInvoice.findOne({
+          paymentReference: reference,
+        });
+        if (!invoice) {
+          return res.status(200).json({ status: true, message: "Payment not found" });
+        }
+        if (invoice.status === SubscriptionInvoiceStatus.PAID) {
+          return res.status(200).json({ status: true, message: "Already processed" });
+        }
+        const eventName = event?.event as string | undefined;
+        const invoiceSuccess =
+          eventName === "charge.success" || data?.status === "success";
+        if (invoiceSuccess) {
+          await applySuccessfulInvoicePayment(invoice, data);
+        }
+        return res.status(200).json({
+          status: true,
+          paymentStatus: invoiceSuccess ? "SUCCESS" : "FAILED",
+          message: invoiceSuccess ? "Payment success" : "Payment failed",
+        });
       }
       if (payment.status === "SUCCESS") {
         return res.status(200).json({ status: true, message: "Already processed" });

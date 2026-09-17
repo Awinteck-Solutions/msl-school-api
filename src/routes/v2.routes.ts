@@ -31,6 +31,9 @@ import advertV2Routes from "../Features/adverts/route/advert.v2.route";
 import adminAdvertV2Routes from "../Features/adverts/route/admin.advert.v2.route";
 import paymentRoutes from "../Features/payments/route/payment.v2.route";
 import adminPaymentRoutes from "../Features/payments/route/admin.payment.v2.route";
+import subscriptionRoutes from "../Features/subscription/route/subscription.v2.route";
+import adminSubscriptionRoutes from "../Features/subscription/route/admin.subscription.v2.route";
+import subscriptionAiRoutes from "../Features/subscription/route/subscriptionAi.v2.route";
 const Router = express.Router();
 
 Router.use("/user", userV2Routes);
@@ -64,6 +67,9 @@ Router.use("/adverts", advertV2Routes);
 Router.use("/admin/adverts", adminAdvertV2Routes);
 Router.use("/admin/payment", adminPaymentRoutes);
 Router.use("/payment", paymentRoutes);
+Router.use("/subscription", subscriptionRoutes);
+Router.use("/admin/subscription", adminSubscriptionRoutes);
+Router.use("/subscription-ai", subscriptionAiRoutes);
 
 
 export { Router as v2Router };

@@ -81,6 +81,7 @@ export class UserService {
         "streaks",
         "smartconnect",
         "course_alerts",
+        "subscription",
       ];
       const $set: Record<string, boolean> = {};
       for (const key of channels) {
@@ -100,7 +101,7 @@ export class UserService {
         return res.status(400).json({
           status: false,
           message:
-            "Provide at least one of: gamification, streaks, smartconnect, course_alerts (boolean)",
+            "Provide at least one of: gamification, streaks, smartconnect, course_alerts, subscription (boolean)",
         });
       }
 
@@ -119,6 +120,7 @@ export class UserService {
           streaks: settings?.streaks !== false,
           smartconnect: settings?.smartconnect !== false,
           course_alerts: settings?.course_alerts !== false,
+          subscription: settings?.subscription !== false,
         },
       });
     } catch (error) {

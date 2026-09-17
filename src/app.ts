@@ -13,6 +13,7 @@ import path = require("path");
 import connectToDatabase from "./database/data-source";
 import { attachGeminiLiveProxy } from "./Features/geminiAi/live/geminiLiveProxy";
 import { startStreakReminderCron } from "./Features/gamification/cron/streakReminder.cron";
+import { startSubscriptionBillingCron } from "./Features/subscription/cron/subscriptionBilling.cron";
 
 
 dotenv.config();
@@ -51,6 +52,9 @@ connectToDatabase().then(() => {
     attachGeminiLiveProxy(server);
     startStreakReminderCron({
         cronExpression: process.env.STREAK_REMINDER_CRON || "00 18 * * *",
+    });
+    startSubscriptionBillingCron({
+        cronExpression: process.env.SUBSCRIPTION_BILLING_CRON || "0 9 * * *",
     });
     server.listen(process.env.PORT || 3000, ()=> console.log(`Server running on port ${process.env.PORT} ✅`))
 }).catch((error) => {

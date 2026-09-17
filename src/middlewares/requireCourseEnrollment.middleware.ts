@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
-import Enrolled from "../Features/course/schema/enroll.schema";
 import { Roles } from "../enums/roles.enum";
+import { countActiveCourseEnrollments } from "../helpers/enrollment";
 
 /**
  * After auth: students must have at least one enrollment where both the
@@ -33,27 +33,7 @@ export const requireActiveCourseEnrollment = async (
       return;
     }
 
-    const counted = (await Enrolled.aggregate([
-      { $match: { email, status: "ACTIVE" } },
-      {
-        $lookup: {
-          from: "courses",
-          localField: "course",
-          foreignField: "_id",
-          as: "courseDoc",
-        },
-      },
-      { $unwind: "$courseDoc" },
-      {
-        $match: {
-          "courseDoc.status": "ACTIVE",
-          "courseDoc.archived": { $ne: true },
-        },
-      },
-      { $count: "total" },
-    ])) as { total?: number }[];
-
-    const count = counted[0]?.total ?? 0;
+    const count = await countActiveCourseEnrollments(email);
 
     if (count < 1) {
       const path = (req.originalUrl || req.url || "").split("?")[0];

@@ -706,7 +706,7 @@ export class AdminLessonV2Controller {
             message: "Lesson delete success",
           });
         })
-        .catch((error) => {
+        .catch((error:any) => {
           return res.status(404).json({
             status: false,
             message: "Lesson delete failed",

@@ -1,0 +1,567 @@
+{
+  "info": {
+    "_postman_id": "msl-subscription-v2",
+    "name": "MSL Subscription",
+    "description": "Monthly AI subscription APIs. Import into Postman, then drag these folders into your existing MSL School API collection if you want them merged.\n\nUses the same variables as MSL School API (v2): baseUrl, token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "token", "value": "" },
+    { "key": "authorId", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "subscriptionResourceId", "value": "" },
+    { "key": "fileId", "value": "" },
+    { "key": "invoiceId", "value": "" },
+    { "key": "reference", "value": "" },
+    { "key": "studentId", "value": "" },
+    { "key": "s3Key", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Admin - Subscription",
+      "item": [
+        {
+          "name": "Plan",
+          "item": [
+            {
+              "name": "Get Plan",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/plan"
+              }
+            },
+            {
+              "name": "Update Plan",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 5000,\n  \"currency\": \"NGN\",\n  \"intervalDays\": 30,\n  \"gracePeriodDays\": 7,\n  \"reminderDaysBeforeExpiry\": 3,\n  \"dailyAiLimit\": 10,\n  \"monthlyAiLimit\": 100,\n  \"isActive\": true,\n  \"description\": \"Monthly AI subscription for users without course enrollment\"\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/subscription/plan"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subscribers & Invoices",
+          "item": [
+            {
+              "name": "List Subscriptions",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription?page=1&limit=50&status=&email=&userId="
+              }
+            },
+            {
+              "name": "List Invoices",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/invoices?page=1&limit=50&status=&email=&userId="
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resources (corpus)",
+          "item": [
+            {
+              "name": "Create Resource (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    { "key": "upload", "type": "file", "src": "", "description": "Thumbnail image" },
+                    { "key": "title", "type": "text", "value": "ICAG Study Pack" },
+                    { "key": "desc", "type": "text", "value": "Shared AI corpus for subscription users" },
+                    { "key": "link", "type": "text", "value": "" },
+                    { "key": "price", "type": "text", "value": "0" },
+                    { "key": "category", "type": "text", "value": "{{categoryId}}" },
+                    { "key": "status", "type": "text", "value": "ACTIVE" },
+                    { "key": "authorId", "type": "text", "value": "{{authorId}}" }
+                  ]
+                },
+                "url": "{{baseUrl}}/v2/admin/subscription/resources"
+              }
+            },
+            {
+              "name": "Update Resource",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"{{subscriptionResourceId}}\",\n  \"title\": \"ICAG Study Pack\",\n  \"desc\": \"Updated description\",\n  \"link\": \"\",\n  \"price\": \"0\",\n  \"category\": \"{{categoryId}}\",\n  \"status\": \"ACTIVE\"\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/subscription/resources"
+              }
+            },
+            {
+              "name": "Update Resource Thumbnail (multipart)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    { "key": "upload", "type": "file", "src": "" },
+                    { "key": "id", "type": "text", "value": "{{subscriptionResourceId}}" }
+                  ]
+                },
+                "url": "{{baseUrl}}/v2/admin/subscription/resources/thumbnail"
+              }
+            },
+            {
+              "name": "List Resources",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/resources?page=1&limit=50&status="
+              }
+            },
+            {
+              "name": "Get Resource",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/resources/{{subscriptionResourceId}}"
+              }
+            },
+            {
+              "name": "Delete Resource",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/resources/{{subscriptionResourceId}}"
+              }
+            },
+            {
+              "name": "Delete Resource File (PDF/Video)",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/resources/{{subscriptionResourceId}}/files/{{fileId}}"
+              }
+            },
+            {
+              "name": "Upload PDFs/Videos under Resource (multipart)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    { "key": "files", "type": "file", "src": "", "description": "PDF or video. Repeat this field for multiple files." }
+                  ]
+                },
+                "url": "{{baseUrl}}/v2/admin/subscription/resources/{{subscriptionResourceId}}/files"
+              }
+            },
+            {
+              "name": "Process Resource Files",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ids\": []\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/subscription/resources/{{subscriptionResourceId}}/process"
+              }
+            },
+            {
+              "name": "Process File from URL",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"sourceUrl\": \"https://example.com/material.pdf\"\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/subscription/resources/{{subscriptionResourceId}}/process-from-url"
+              }
+            },
+            {
+              "name": "Process All Pending Files",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ids\": [],\n  \"resourceId\": \"{{subscriptionResourceId}}\"\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/subscription/resources/process"
+              }
+            },
+            {
+              "name": "Processing Status",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/resources/processing-status"
+              }
+            }
+          ]
+        },
+        {
+          "name": "AI Limits & Usage",
+          "item": [
+            {
+              "name": "Collection Info",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/ai/collection-info"
+              }
+            },
+            {
+              "name": "Get AI Limits",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/ai/limits"
+              }
+            },
+            {
+              "name": "Update AI Limits",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{token}}" },
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"dailyAiLimit\": 10,\n  \"monthlyAiLimit\": 100\n}"
+                },
+                "url": "{{baseUrl}}/v2/admin/subscription/ai/limits"
+              }
+            },
+            {
+              "name": "All Usage",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/ai/usage?page=1&limit=50&studentId="
+              }
+            },
+            {
+              "name": "Student Usage",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": "{{baseUrl}}/v2/admin/subscription/ai/usage/{{studentId}}"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "User - Subscription",
+      "item": [
+        {
+          "name": "Get Plan",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v2/subscription/plan"
+          }
+        },
+        {
+          "name": "Status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription/status"
+          }
+        },
+        {
+          "name": "List Resources",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription/resources?page=1&limit=50"
+          }
+        },
+        {
+          "name": "Subscribe (create invoice + Paystack URL)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription/subscribe"
+          }
+        },
+        {
+          "name": "My Invoices",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription/invoices?page=1&limit=50"
+          }
+        },
+        {
+          "name": "Pay Invoice",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription/invoices/{{invoiceId}}/pay"
+          }
+        },
+        {
+          "name": "Verify Payment",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription/verify/{{reference}}"
+          }
+        },
+        {
+          "name": "Payment Callback View",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v2/subscription/callback?reference={{reference}}"
+          }
+        },
+        {
+          "name": "Paystack Webhook",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"charge.success\",\n  \"data\": {\n    \"reference\": \"{{reference}}\",\n    \"status\": \"success\"\n  }\n}"
+            },
+            "url": "{{baseUrl}}/v2/subscription/webhook"
+          }
+        },
+        {
+          "name": "Cancel",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription/cancel"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User - Subscription AI",
+      "item": [
+        {
+          "name": "Query General",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Explain the key ideas.\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/query-general"
+          }
+        },
+        {
+          "name": "Query General (stream)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Explain the key ideas.\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/query-general-stream"
+          }
+        },
+        {
+          "name": "Query General (context)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Continue from our last message.\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/query-general-context"
+          }
+        },
+        {
+          "name": "Query General (context stream)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Continue from our last message.\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/query-general-context-stream"
+          }
+        },
+        {
+          "name": "Query General (context audio text stream)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Stream text first, generate audio in background.\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"voiceName\": \"Aoede\"\n}"
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/query-general-context-audio-text-stream"
+          }
+        },
+        {
+          "name": "Query Image (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "image", "type": "file", "src": "" },
+                { "key": "question", "type": "text", "value": "What does this image show?" },
+                { "key": "resourceId", "type": "text", "value": "{{subscriptionResourceId}}" },
+                { "key": "s3Keys", "type": "text", "value": "[\"{{s3Key}}\"]" }
+              ]
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/query-image"
+          }
+        },
+        {
+          "name": "Voice to Text (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "audio", "type": "file", "src": "" },
+                { "key": "languageCode", "type": "text", "value": "en-US" }
+              ]
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/voice-to-text"
+          }
+        },
+        {
+          "name": "Summarize",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"Key concepts\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}"
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/summarize"
+          }
+        },
+        {
+          "name": "Generate Flashcards",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"Key concepts\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"count\": 10\n}"
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/generate-flashcards"
+          }
+        },
+        {
+          "name": "Generate Quiz",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"Key concepts\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"numQuestions\": 5\n}"
+            },
+            "url": "{{baseUrl}}/v2/subscription-ai/generate-quiz"
+          }
+        },
+        {
+          "name": "History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription-ai/history?page=1&limit=50"
+          }
+        },
+        {
+          "name": "Recent Activity",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription-ai/recent-activity?page=1&limit=50"
+          }
+        },
+        {
+          "name": "Summaries",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription-ai/summaries"
+          }
+        },
+        {
+          "name": "Flashcards",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription-ai/flashcards"
+          }
+        },
+        {
+          "name": "Quizzes",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/subscription-ai/quizzes"
+          }
+        }
+      ]
+    }
+  ]
+}

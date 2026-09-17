@@ -3,7 +3,8 @@ export type UserNotificationChannel =
   | "gamification"
   | "streaks"
   | "smartconnect"
-  | "course_alerts";
+  | "course_alerts"
+  | "subscription";
 
 export type UserNotificationSettingsShape = Partial<
   Record<UserNotificationChannel, boolean>

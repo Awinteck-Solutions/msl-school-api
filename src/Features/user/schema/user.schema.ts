@@ -51,6 +51,7 @@ const userSchema = new Schema({
         streaks: { type: Boolean, default: true },
         smartconnect: { type: Boolean, default: true },
         course_alerts: { type: Boolean, default: true },
+        subscription: { type: Boolean, default: true },
     },
 },  {timestamps: true})
 

@@ -210,6 +210,7 @@ Router.post(
   }
 );
 
+// IN-USE FOR DESKTOP APP
 Router.post(
   "/query-general-context-stream",
   // chatLimiter,
@@ -243,6 +244,7 @@ Router.post(
   }
 );
 
+// IN-USE FOR DESKTOP APP
 // returns chunks of text and asynchronously uses it to create audio chunks
 Router.post(
   "/query-general-context-audio-text-stream",
@@ -263,6 +265,7 @@ Router.post(
   // )
 );
 
+// IN-USE FOR DESKTOP APP
 Router.post(
   "/query-image",
   // chatLimiter,
@@ -290,6 +293,7 @@ Router.post(
   }
 );
 
+// IN-USE FOR DESKTOP APP
 Router.post(
   "/voice-to-text",
   // chatLimiter,

@@ -350,6 +350,7 @@ export class GeminiAiV2Controller {
 
       const historyFilter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         $or: [
           { queryType: "chat" },
           { queryType: { $exists: false } },
@@ -497,6 +498,7 @@ export class GeminiAiV2Controller {
 
       const filter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         queryType: "summarize",
       };
       if (courseId) {
@@ -569,6 +571,7 @@ export class GeminiAiV2Controller {
 
       const filter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         queryType: "generate-flashcards",
       };
       if (courseId) {
@@ -666,6 +669,7 @@ export class GeminiAiV2Controller {
 
       const filter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         queryType: "generate-quiz",
       };
       if (courseId) {
@@ -784,6 +788,7 @@ export class GeminiAiV2Controller {
 
       const filter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         // queryType: { $ne: "chat" }, 
         // include query types: generate-flashcards, generate-quiz, summarize
         queryType: { $in: ["generate-flashcards", "generate-quiz", "summarize"] },
@@ -963,6 +968,7 @@ export class GeminiAiV2Controller {
 
       const filter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
       };
       if (courseId) {
         if (!mongoose.Types.ObjectId.isValid(courseId)) {
@@ -1732,6 +1738,7 @@ export class GeminiAiV2Controller {
 
       const historyFilter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         $or: [
           { queryType: "chat" },
           { queryType: { $exists: false } },
@@ -1958,6 +1965,7 @@ export class GeminiAiV2Controller {
 
       const historyFilter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         $or: [
           { queryType: "chat" },
           { queryType: { $exists: false } },
@@ -2202,6 +2210,7 @@ export class GeminiAiV2Controller {
 
       const historyFilter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         $or: [
           { queryType: "chat" },
           { queryType: { $exists: false } },
@@ -2388,6 +2397,7 @@ export class GeminiAiV2Controller {
 
       const historyFilter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         $or: [
           { queryType: "chat" },
           { queryType: { $exists: false } },
@@ -2704,6 +2714,7 @@ export class GeminiAiV2Controller {
 
       const historyFilter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         $or: [
           { queryType: "chat" },
           { queryType: { $exists: false } },
@@ -3092,6 +3103,7 @@ export class GeminiAiV2Controller {
 
       const historyFilter: Record<string, any> = {
         student: new mongoose.Types.ObjectId(id),
+        source: { $ne: "subscription" },
         $or: [
           { queryType: "chat" },
           { queryType: { $exists: false } },
