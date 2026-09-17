@@ -8,21 +8,23 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_MSL }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY_MSL }}
-          aws-region: ${{ secrets.AWS_REGION_MSL }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
         run: |
-          aws ecr get-login-password --region us-east-1 \
+          aws ecr get-login-password --region "$AWS_REGION" \
           | docker login --username AWS \
           --password-stdin ${{ secrets.ECR_REGISTRY_MSL }}
 
@@ -41,7 +43,7 @@ jobs:
           ${{ secrets.ECR_REGISTRY_MSL }}/taxlawgh:${{ github.sha }}
 
       - name: Deploy on EC2
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@v1.2.4
         with:
           host: ${{ secrets.SERVER_IP_MSL }}
           username: ubuntu
