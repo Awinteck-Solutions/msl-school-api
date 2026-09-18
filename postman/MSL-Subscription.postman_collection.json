@@ -81,14 +81,11 @@
                 "body": {
                   "mode": "formdata",
                   "formdata": [
-                    { "key": "upload", "type": "file", "src": "", "description": "Thumbnail image" },
+                    { "key": "upload", "type": "file", "src": "", "description": "Optional thumbnail image" },
                     { "key": "title", "type": "text", "value": "ICAG Study Pack" },
                     { "key": "desc", "type": "text", "value": "Shared AI corpus for subscription users" },
-                    { "key": "link", "type": "text", "value": "" },
-                    { "key": "price", "type": "text", "value": "0" },
                     { "key": "category", "type": "text", "value": "{{categoryId}}" },
                     { "key": "status", "type": "text", "value": "ACTIVE" },
-                    { "key": "authorId", "type": "text", "value": "{{authorId}}" }
                   ]
                 },
                 "url": "{{baseUrl}}/v2/admin/subscription/resources"

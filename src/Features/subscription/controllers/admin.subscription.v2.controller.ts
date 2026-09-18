@@ -391,36 +391,29 @@ export class AdminSubscriptionV2Controller {
 
   static async createResource(req: MulterRequest, res: Response) {
     try {
-      const { title, desc, link, price, category, status } = req.body as {
+      const { title, desc, category, status } = req.body as {
         title?: string;
         desc?: string;
-        link?: string;
-        price?: string;
         category?: string;
         status?: string;
       };
       const authorId = req["currentUser"]?._id;
-      if (!title || !status ) {
+      if (!title) {
         return res.status(400).json({
           status: false,
-          message: "title and status are required",
-        });
-      }
-      const file = req.file;
-      if (!file) {
-        return res.status(400).json({
-          status: false,
-          message: "Image file is required",
+          message: "title is required",
         });
       }
 
-      const uploaded = await uploadFile(file, "subscription-ai");
+      const file = req.file;
+      const thumbnail = file
+        ? (await uploadFile(file, "subscription-ai")).key
+        : null;
+
       const resource = await SubscriptionResource.create({
         title,
         description: desc || null,
-        thumbnail: uploaded.key,
-        link: link || null,
-        price: price || null,
+        thumbnail,
         category: category || null,
         categoryId:
           category && mongoose.Types.ObjectId.isValid(category)
