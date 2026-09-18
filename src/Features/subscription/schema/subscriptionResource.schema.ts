@@ -6,10 +6,7 @@ const subscriptionResourceSchema = new Schema(
   {
     title: { type: String, required: true },
     description: { type: String, default: null },
-    thumbnail: { type: String, default: null },
-    link: { type: String, default: null },
-    price: { type: String, default: null },
-    category: { type: String, required: false },
+    thumbnail: { type: String, default: null },   
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",

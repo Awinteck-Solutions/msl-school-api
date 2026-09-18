@@ -413,8 +413,7 @@ export class AdminSubscriptionV2Controller {
       const resource = await SubscriptionResource.create({
         title,
         description: desc || null,
-        thumbnail,
-        category: category || null,
+        thumbnail, 
         categoryId:
           category && mongoose.Types.ObjectId.isValid(category)
             ? category
@@ -442,19 +441,17 @@ export class AdminSubscriptionV2Controller {
 
   static async updateResource(req: Request, res: Response) {
     try {
-      const { id, title, desc, link, price, category, status } = req.body as {
+      const { id, title, desc, category, status } = req.body as {
         id?: string;
         title?: string;
-        desc?: string;
-        link?: string;
-        price?: string;
+        desc?: string; 
         category?: string;
         status?: string;
       };
-      if (!id || !title || !status) {
+      if (!id || !title ) {
         return res.status(400).json({
           status: false,
-          message: "id, title, and status are required",
+          message: "id and title are required",
         });
       }
       const updated = await SubscriptionResource.findOneAndUpdate(
@@ -462,14 +459,14 @@ export class AdminSubscriptionV2Controller {
         {
           title,
           description: desc || null,
-          link: link || null,
-          price: price || null,
-          category: category || null,
           categoryId:
             category && mongoose.Types.ObjectId.isValid(category)
               ? category
               : undefined,
-          status,
+          status:
+            status === SubscriptionContentStatus.DEACTIVE
+              ? SubscriptionContentStatus.DEACTIVE
+              : SubscriptionContentStatus.ACTIVE,
         },
         { new: true }
       );
