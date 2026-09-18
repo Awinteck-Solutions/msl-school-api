@@ -238,6 +238,103 @@ export const parsePdfText = async (pdfBuffer: Buffer) => {
   }
 };
 
+const PAGE_MARKER_RE = /--\s*\d+\s+of\s+\d+\s*--/gi;
+
+export const isLowQualityPdfText = (text: string): boolean => {
+  const cleaned = String(text || "")
+    .replace(PAGE_MARKER_RE, " ")
+    .replace(/[→←↑↓•·▪►▶]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const letters = (cleaned.match(/[A-Za-z0-9]/g) || []).length;
+  return cleaned.length < 80 || letters < 60;
+};
+
+const PDF_EXTRACT_PROMPT = `Extract all readable text from this PDF in reading order.
+Include headings, bullet points, tables, and slide content.
+Ignore decorative page numbers, arrows, and "N of M" markers.
+Output plain text only.`;
+
+const waitForGeminiFile = async (
+  fileManager: GoogleAIFileManager,
+  fileName: string
+) => {
+  const maxWaitMs = 180000;
+  const pollIntervalMs = 2000;
+  let elapsed = 0;
+  while (elapsed < maxWaitMs) {
+    const meta = await fileManager.getFile(fileName);
+    const state = (meta as { state?: string })?.state;
+    if (state === "ACTIVE") return meta;
+    if (state === "FAILED") {
+      throw new Error(
+        "Gemini file processing failed: " +
+          (meta as { error?: { message?: string } })?.error?.message
+      );
+    }
+    await new Promise((r) => setTimeout(r, pollIntervalMs));
+    elapsed += pollIntervalMs;
+  }
+  throw new Error("Gemini file processing timed out");
+};
+
+export const extractPdfTextWithGemini = async (
+  pdfBuffer: Buffer
+): Promise<string> => {
+  const apiKey = process.env.GEMINI_API_KEY || "";
+  if (!apiKey) {
+    throw new Error("Missing GEMINI_API_KEY");
+  }
+  const fileManager = new GoogleAIFileManager(apiKey);
+  const uploadResponse = await fileManager.uploadFile(pdfBuffer, {
+    mimeType: "application/pdf",
+    displayName: `pdf_extract_${Date.now()}`,
+  });
+  const file = uploadResponse.file;
+  if (!file?.uri || !file?.name) {
+    throw new Error("Gemini file upload did not return a URI");
+  }
+  const ready = await waitForGeminiFile(fileManager, file.name);
+  const completion = await geminiChatModel.generateContent({
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            fileData: {
+              fileUri: file.uri,
+              mimeType:
+                (ready as { mimeType?: string })?.mimeType || "application/pdf",
+            },
+          },
+          { text: PDF_EXTRACT_PROMPT },
+        ],
+      },
+    ],
+  });
+  return completion.response.text().replace(/\s+/g, " ").trim();
+};
+
+export const extractPdfContent = async (pdfBuffer: Buffer): Promise<string> => {
+  let text = "";
+  try {
+    text = await parsePdfText(pdfBuffer);
+  } catch (error: any) {
+    console.warn(
+      "[pdf] text-layer parse failed, falling back to Gemini OCR",
+      error?.message || error
+    );
+  }
+  if (!isLowQualityPdfText(text)) return text;
+  const ocrText = await extractPdfTextWithGemini(pdfBuffer);
+  if (isLowQualityPdfText(ocrText)) {
+    throw new Error(
+      "PDF has no usable text layer and Gemini OCR returned too little content"
+    );
+  }
+  return ocrText;
+};
+
 /** Download any file from S3 to a buffer (used for video/audio). */
 export const downloadFileFromS3 = async (s3Key: string): Promise<Buffer> => {
   const params = { Bucket: bucketName, Key: s3Key };

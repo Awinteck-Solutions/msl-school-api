@@ -4,7 +4,7 @@ const Schema = mongoose.Schema;
 const subscriptionPlanSchema = new Schema(
   {
     amount: { type: Number, required: true, default: 0, min: 0 },
-    currency: { type: String, required: true, default: "NGN" },
+    currency: { type: String, required: true, default: "GHS" },
     intervalDays: { type: Number, required: true, default: 30, min: 1 },
     gracePeriodDays: { type: Number, required: true, default: 7, min: 0 },
     reminderDaysBeforeExpiry: {

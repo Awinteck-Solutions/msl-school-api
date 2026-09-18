@@ -214,7 +214,6 @@ const getSearchCollections = async (
 const getGenerationContext = async (params: {
   email?: string;
   s3Keys?: string[];
-  topic?: string;
   resourceId?: string;
 }) => {
   const { collections, courseIds } = await getSearchCollections(
@@ -223,19 +222,6 @@ const getGenerationContext = async (params: {
     params.resourceId
   );
   const collectionNames = collections.map((item) => item.name);
-
-  if (params.topic) {
-    const embeddingVector = await embedText(params.topic);
-    const searchResult = await searchAiCollections({
-      collections,
-      embeddingVector,
-      limit: 12,
-    });
-    return searchResult
-      .map((point) => point.payload?.text)
-      .filter(Boolean)
-      .join("\n\n");
-  }
 
   const scopedContext = await getContextFromQdrant({
     s3Keys: params.s3Keys,
@@ -662,9 +648,8 @@ export class SubscriptionAiV2Controller {
   static async summarize(req: Request, res: Response) {
     try {
       const currentUser = req["currentUser"] as { id?: string; email?: string };
-      const { s3Keys, topic, resourceId } = req.body as {
+      const { s3Keys, resourceId } = req.body as {
         s3Keys?: string[];
-        topic?: string;
         resourceId?: string;
       };
       if (!currentUser?.id) {
@@ -679,7 +664,6 @@ export class SubscriptionAiV2Controller {
       const contextText = await getGenerationContext({
         email: currentUser.email,
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        topic,
         resourceId,
       });
       if (!contextText || contextText.trim().length < 1) {
@@ -699,7 +683,7 @@ export class SubscriptionAiV2Controller {
         student: currentUser.id,
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
         queryType: "summarize",
-        question: topic || "[summarize]",
+        question: "[summarize]",
         answer: summary,
         prompt_tokens: usage?.promptTokenCount ?? estimateTokens(prompt),
         completion_tokens: usage?.candidatesTokenCount ?? estimateTokens(summary),
@@ -735,9 +719,8 @@ export class SubscriptionAiV2Controller {
   static async generateFlashcards(req: Request, res: Response) {
     try {
       const currentUser = req["currentUser"] as { id?: string; email?: string };
-      const { s3Keys, topic, count = 10, resourceId } = req.body as {
+      const { s3Keys, count = 10, resourceId } = req.body as {
         s3Keys?: string[];
-        topic?: string;
         count?: number;
         resourceId?: string;
       };
@@ -753,7 +736,6 @@ export class SubscriptionAiV2Controller {
       const contextText = await getGenerationContext({
         email: currentUser.email,
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        topic,
         resourceId,
       });
       if (!contextText || contextText.trim().length < 50) {
@@ -796,7 +778,7 @@ export class SubscriptionAiV2Controller {
         student: currentUser.id,
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
         queryType: "generate-flashcards",
-        question: topic || "[generate-flashcards]",
+        question: "[generate-flashcards]",
         answer: raw,
         prompt_tokens: estimateTokens(prompt),
         completion_tokens: estimateTokens(raw),
@@ -833,9 +815,8 @@ export class SubscriptionAiV2Controller {
   static async generateQuiz(req: Request, res: Response) {
     try {
       const currentUser = req["currentUser"] as { id?: string; email?: string };
-      const { s3Keys, topic, numQuestions = 5, resourceId } = req.body as {
+      const { s3Keys, numQuestions = 5, resourceId } = req.body as {
         s3Keys?: string[];
-        topic?: string;
         numQuestions?: number;
         resourceId?: string;
       };
@@ -851,7 +832,6 @@ export class SubscriptionAiV2Controller {
       const contextText = await getGenerationContext({
         email: currentUser.email,
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
-        topic,
         resourceId,
       });
       if (!contextText || contextText.trim().length < 50) {
@@ -909,7 +889,7 @@ export class SubscriptionAiV2Controller {
         student: currentUser.id,
         s3Keys: Array.isArray(s3Keys) ? s3Keys : undefined,
         queryType: "generate-quiz",
-        question: topic || "[generate-quiz]",
+        question: "[generate-quiz]",
         answer: raw,
         prompt_tokens: estimateTokens(prompt),
         completion_tokens: estimateTokens(raw),

@@ -45,6 +45,7 @@ const aiUsageSchema = new Schema(
 );
 
 aiUsageSchema.index({ student: 1, source: 1, createdAt: -1 });
+aiUsageSchema.index({ source: 1, createdAt: -1 });
 
 const AiUsage = mongoose.model("AiUsage", aiUsageSchema);
 

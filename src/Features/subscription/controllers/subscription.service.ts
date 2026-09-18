@@ -62,7 +62,7 @@ export const getOrCreateSubscriptionPlan = async () => {
     {
       $setOnInsert: {
         amount: 0,
-        currency: "NGN",
+        currency: "GHS",
         intervalDays: 30,
         gracePeriodDays: 7,
         reminderDaysBeforeExpiry: 3,
@@ -325,8 +325,15 @@ export const startSubscriptionCheckout = async (params: {
   email: string;
 }) => {
   const plan = await getOrCreateSubscriptionPlan();
-  if (!plan.isActive || !plan.amount || plan.amount <= 0) {
-    const error: any = new Error("Subscription plan is not available yet");
+  if (!plan.isActive) {
+    const error: any = new Error("Subscription plan is not active");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!plan.amount || plan.amount <= 0) {
+    const error: any = new Error(
+      "Subscription plan price is not configured. An admin must set amount > 0 on PUT /v2/admin/subscription/plan"
+    );
     error.statusCode = 400;
     throw error;
   }

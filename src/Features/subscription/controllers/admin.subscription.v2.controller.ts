@@ -27,7 +27,7 @@ import {
   handleQdrantOperation,
   inferSourceTypeFromUrl,
   LESSON_FILES_BASE_URL,
-  parsePdfText,
+  extractPdfContent,
   qdrant,
   resolveVectorFormat,
   s3,
@@ -89,7 +89,7 @@ const loadResourceFileBuffer = async (file: {
       console.error(
         "[subscription-ai] S3 download failed, falling back to URL",
         fileKey,
-        error
+        // error
       );
     }
   }
@@ -263,9 +263,12 @@ export class AdminSubscriptionV2Controller {
         "dailyAiLimit",
         "monthlyAiLimit",
       ] as const;
+      if (body.amount === undefined && body.price !== undefined) {
+        body.amount = body.price;
+      }
 
       for (const field of numericFields) {
-        if (body[field] === undefined) continue;
+        if (body[field] === undefined || body[field] === "") continue;
         const value = Number(body[field]);
         if (!Number.isFinite(value) || value < 0) {
           return res.status(400).json({
@@ -295,6 +298,16 @@ export class AdminSubscriptionV2Controller {
       }
       if (typeof body.isActive === "boolean") {
         plan.isActive = body.isActive;
+      } else if (typeof body.isActive === "string") {
+        if (body.isActive.toLowerCase() === "true") plan.isActive = true;
+        if (body.isActive.toLowerCase() === "false") plan.isActive = false;
+      }
+      if (plan.isActive && (!plan.amount || plan.amount <= 0)) {
+        return res.status(400).json({
+          status: false,
+          message:
+            "Set amount greater than 0 before activating the subscription plan",
+        });
       }
       plan.updatedBy = currentUser?.email || "admin";
       await plan.save();
@@ -893,19 +906,21 @@ export class AdminSubscriptionV2Controller {
         resourceId?: string;
       };
       const paramId = (req.params as { id?: string }).id;
-      const filter: Record<string, any> = {
-        status: {
+      const filter: Record<string, any> = {};
+      const hasExplicitIds = Array.isArray(ids) && ids.length > 0;
+      if (!hasExplicitIds) {
+        filter.status = {
           $in: [
             SubscriptionResourceFileStatus.PENDING,
             SubscriptionResourceFileStatus.FAILED,
           ],
-        },
-      };
+        };
+      }
       const scopedResourceId = resourceId || paramId;
       if (scopedResourceId && mongoose.Types.ObjectId.isValid(scopedResourceId)) {
         filter.resource = new mongoose.Types.ObjectId(scopedResourceId);
       }
-      if (Array.isArray(ids) && ids.length > 0) {
+      if (hasExplicitIds) {
         const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
         filter._id = { $in: validIds.map((id) => new mongoose.Types.ObjectId(id)) };
       }
@@ -968,6 +983,10 @@ export class AdminSubscriptionV2Controller {
             { $set: { status: SubscriptionResourceFileStatus.PROCESSING } },
             { new: true }
           );
+          await deleteSubscriptionQdrantPoints({
+            resourceId: String(file.resource || ""),
+            s3Keys: file.fileKey ? [file.fileKey] : undefined,
+          });
           const { buffer, url } = await loadResourceFileBuffer(file);
           const fileSizeMB = buffer.length / (1024 * 1024);
           await SubscriptionResourceFile.updateOne(
@@ -983,7 +1002,7 @@ export class AdminSubscriptionV2Controller {
               .toLowerCase()
               .endsWith(".pdf");
           if (isPdf) {
-            const text = await parsePdfText(buffer);
+            const text = await extractPdfContent(buffer);
             if (!text || text.length < 10) {
               await SubscriptionResourceFile.updateOne(
                 { _id: file._id },
@@ -1182,7 +1201,10 @@ export class AdminSubscriptionV2Controller {
   static async usage(req: Request, res: Response) {
     try {
       const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
-      const limit = Math.max(1, parseInt(req.query.limit as string, 10) || 50);
+      const limit = Math.min(
+        50,
+        Math.max(1, parseInt(req.query.limit as string, 10) || 20)
+      );
       const skip = (page - 1) * limit;
       const studentId = (req.query.studentId as string) || "";
       const filter: Record<string, any> = { source: "subscription" };
@@ -1190,16 +1212,55 @@ export class AdminSubscriptionV2Controller {
         filter.student = new mongoose.Types.ObjectId(studentId);
       }
 
-      const [items, total] = await Promise.all([
-        AiUsage.find(filter)
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limit)
-          .populate({ path: "student", select: "firstname lastname email" })
-          .lean(),
-        AiUsage.countDocuments(filter),
-      ]);
-      const totalPages = Math.ceil(total / limit);
+      const hint = filter.student
+        ? { student: 1, source: 1, createdAt: -1 }
+        : { source: 1, createdAt: -1 };
+      const queryOptions = {
+        projection: {
+          student: 1,
+          queryType: 1,
+          source: 1,
+          prompt_tokens: 1,
+          completion_tokens: 1,
+          total_tokens: 1,
+          model: 1,
+          cost_estimate_usd: 1,
+          createdAt: 1,
+        },
+        sort: { createdAt: -1 as const },
+        skip,
+        limit: limit + 1,
+        maxTimeMS: 8000,
+      };
+
+      let rows: any[];
+      try {
+        rows = await AiUsage.collection
+          .find(filter, { ...queryOptions, hint })
+          .toArray();
+      } catch {
+        rows = await AiUsage.collection.find(filter, queryOptions).toArray();
+      }
+
+      const hasNextPage = rows.length > limit;
+      const pageRows = hasNextPage ? rows.slice(0, limit) : rows;
+      const studentIds = [
+        ...new Set(
+          pageRows
+            .map((row) => row.student)
+            .filter(Boolean)
+            .map((id: any) => String(id))
+        ),
+      ];
+      const students = studentIds.length
+        ? await User.find({ _id: { $in: studentIds } })
+            .select("firstname lastname email")
+            .lean()
+            .maxTimeMS(4000)
+        : [];
+      const studentMap = new Map(
+        students.map((student: any) => [String(student._id), student])
+      );
 
       return res.status(200).json({
         status: true,
@@ -1207,12 +1268,13 @@ export class AdminSubscriptionV2Controller {
         pagination: {
           page,
           limit,
-          total,
-          totalPages,
-          hasNextPage: page < totalPages,
+          hasNextPage,
           hasPrevPage: page > 1,
         },
-        response: items,
+        response: pageRows.map((row) => ({
+          ...row,
+          student: studentMap.get(String(row.student)) || row.student,
+        })),
       });
     } catch (error: any) {
       return res.status(500).json({

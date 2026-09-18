@@ -483,7 +483,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"topic\": \"Key concepts\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}"
+              "raw": "{\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"]\n}"
             },
             "url": "{{baseUrl}}/v2/subscription-ai/summarize"
           }
@@ -498,7 +498,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"topic\": \"Key concepts\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"count\": 10\n}"
+              "raw": "{\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"count\": 10\n}"
             },
             "url": "{{baseUrl}}/v2/subscription-ai/generate-flashcards"
           }
@@ -513,7 +513,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"topic\": \"Key concepts\",\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"numQuestions\": 5\n}"
+              "raw": "{\n  \"resourceId\": \"{{subscriptionResourceId}}\",\n  \"s3Keys\": [\"{{s3Key}}\"],\n  \"numQuestions\": 5\n}"
             },
             "url": "{{baseUrl}}/v2/subscription-ai/generate-quiz"
           }
