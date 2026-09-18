@@ -17,6 +17,7 @@ import {
   calculateOptimalBatchSize,
   checkSubscriptionAiLimits,
   chunkText,
+  downloadFileFromS3,
   downloadFileFromUrl,
   embedText,
   ensurePayloadIndexesForGeminiCollection,
@@ -67,6 +68,32 @@ const publicFileUrl = (fileKey: string) => {
   const base = (LESSON_FILES_BASE_URL || "").replace(/\/$/, "");
   if (fileKey.startsWith("http://") || fileKey.startsWith("https://")) return fileKey;
   return base ? `${base}/${fileKey}` : fileKey;
+};
+
+const isRemoteFileKey = (fileKey?: string) =>
+  Boolean(fileKey && /^https?:\/\//i.test(fileKey));
+
+const qdrantErrorMessage = (error: any) =>
+  error?.data?.status?.error || error?.message || String(error);
+
+const loadResourceFileBuffer = async (file: {
+  fileKey?: string;
+  url?: string;
+}): Promise<{ buffer: Buffer; url: string }> => {
+  const fileKey = file.fileKey || "";
+  const url = file.url || publicFileUrl(fileKey);
+  if (fileKey && !isRemoteFileKey(fileKey)) {
+    try {
+      return { buffer: await downloadFileFromS3(fileKey), url };
+    } catch (error) {
+      console.error(
+        "[subscription-ai] S3 download failed, falling back to URL",
+        fileKey,
+        error
+      );
+    }
+  }
+  return { buffer: await downloadFileFromUrl(url), url };
 };
 
 const extractS3Key = (value?: string | null): string | null => {
@@ -932,7 +959,7 @@ export class AdminSubscriptionV2Controller {
     try {
       await ensureQdrantCollection(SUBSCRIPTION_COLLECTION_NAME);
       await ensurePayloadIndexesForGeminiCollection(SUBSCRIPTION_COLLECTION_NAME);
-      const vectorFormat = await resolveVectorFormat();
+      const vectorFormat = await resolveVectorFormat(SUBSCRIPTION_COLLECTION_NAME);
 
       for (const file of pending) {
         try {
@@ -941,8 +968,7 @@ export class AdminSubscriptionV2Controller {
             { $set: { status: SubscriptionResourceFileStatus.PROCESSING } },
             { new: true }
           );
-          const url = file.url || publicFileUrl(file.fileKey);
-          const buffer = await downloadFileFromUrl(url);
+          const { buffer, url } = await loadResourceFileBuffer(file);
           const fileSizeMB = buffer.length / (1024 * 1024);
           await SubscriptionResourceFile.updateOne(
             { _id: file._id },
@@ -950,7 +976,13 @@ export class AdminSubscriptionV2Controller {
           );
 
           let allChunks: { text: string; chunkIndex: number }[] = [];
-          if (file.fileType === SubscriptionResourceType.PDF) {
+          const isPdf =
+            file.fileType === SubscriptionResourceType.PDF ||
+            String(file.fileType || "").toLowerCase() === "pdf" ||
+            String(file.fileName || file.fileKey || "")
+              .toLowerCase()
+              .endsWith(".pdf");
+          if (isPdf) {
             const text = await parsePdfText(buffer);
             if (!text || text.length < 10) {
               await SubscriptionResourceFile.updateOne(
@@ -995,28 +1027,32 @@ export class AdminSubscriptionV2Controller {
             const embeddings = await Promise.all(
               batch.map((item) => embedText(item.text))
             );
-            const points = batch.map((item, idx) => ({
-              id: uuidv4(),
-              vector: buildPointVector(embeddings[idx], vectorFormat),
-              payload: {
+            const points = batch.map((item, idx) => {
+              const payload: Record<string, unknown> = {
                 sourceType: "subscription",
                 sourceUrl: url,
                 resourceId,
                 s3Key: file.fileKey,
-                pdfKey:
-                  file.fileType === SubscriptionResourceType.PDF
-                    ? file.fileKey
-                    : undefined,
                 fileName: file.fileName || path.basename(file.fileKey),
                 chunkIndex: item.chunkIndex,
                 text: item.text,
                 processedAt: new Date().toISOString(),
-              },
-            }));
-            await qdrant.upsert(SUBSCRIPTION_COLLECTION_NAME, {
-              wait: true,
-              points,
+              };
+              if (isPdf) payload.pdfKey = file.fileKey;
+              return {
+                id: uuidv4(),
+                vector: buildPointVector(embeddings[idx], vectorFormat),
+                payload,
+              };
             });
+            await handleQdrantOperation(
+              () =>
+                qdrant.upsert(SUBSCRIPTION_COLLECTION_NAME, {
+                  wait: true,
+                  points,
+                }),
+              "subscription qdrant upsert"
+            );
             totalUpserted += points.length;
           }
 
@@ -1032,8 +1068,13 @@ export class AdminSubscriptionV2Controller {
             }
           );
         } catch (err: any) {
-          const msg = err?.message ?? String(err);
+          const msg = qdrantErrorMessage(err);
           resourceJobState.lastError = msg;
+          console.error(
+            "[subscription-ai] failed to process file",
+            file.fileKey,
+            msg
+          );
           await SubscriptionResourceFile.updateOne(
             { _id: file._id },
             {
@@ -1047,6 +1088,9 @@ export class AdminSubscriptionV2Controller {
         }
         resourceJobState.processedCount += 1;
       }
+    } catch (error: any) {
+      resourceJobState.lastError = qdrantErrorMessage(error);
+      console.error("[subscription-ai] process resources failed", error);
     } finally {
       resourceJobState.isRunning = false;
     }

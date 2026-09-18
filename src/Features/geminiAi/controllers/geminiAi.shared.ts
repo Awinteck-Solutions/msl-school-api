@@ -532,7 +532,7 @@ type VectorFormat =
   | { type: "unnamed" }
   | { type: "named"; name: string };
 
-let cachedVectorFormat: VectorFormat | null = null;
+let cachedVectorFormatByCollection = new Map<string, VectorFormat>();
 
 const resolveVectorFormatFromConfig = (vectors: any): VectorFormat | null => {
   if (!vectors) return null;
@@ -557,19 +557,20 @@ const resolveVectorFormatFromConfig = (vectors: any): VectorFormat | null => {
   return null;
 };
 
-export const resolveVectorFormat = async (): Promise<VectorFormat> => {
-  if (cachedVectorFormat) return cachedVectorFormat;
+export const resolveVectorFormat = async (
+  collectionName: string = COLLECTION_NAME
+): Promise<VectorFormat> => {
+  const cached = cachedVectorFormatByCollection.get(collectionName);
+  if (cached) return cached;
 
   try {
-    const collectionInfo = (await qdrant.getCollection(
-      COLLECTION_NAME
-    )) as any;
+    const collectionInfo = (await qdrant.getCollection(collectionName)) as any;
     const vectors = collectionInfo?.config?.params?.vectors;
     const sparseVectors = collectionInfo?.config?.params?.sparse_vectors;
 
     const resolved = resolveVectorFormatFromConfig(vectors);
     if (resolved) {
-      cachedVectorFormat = resolved;
+      cachedVectorFormatByCollection.set(collectionName, resolved);
       return resolved;
     }
 
@@ -591,7 +592,7 @@ export const resolveVectorFormat = async (): Promise<VectorFormat> => {
   }
 
   const fallback: VectorFormat = { type: "named", name: QDRANT_VECTOR_NAME };
-  cachedVectorFormat = fallback;
+  cachedVectorFormatByCollection.set(collectionName, fallback);
   return fallback;
 };
 
@@ -802,14 +803,14 @@ export const searchAiCollections = async (options: {
   limit?: number;
 }): Promise<Array<{ payload?: any; score?: number }>> => {
   const limit = options.limit ?? 5;
-  const vectorFormat = await resolveVectorFormat();
-  const vector = buildSearchVector(options.embeddingVector, vectorFormat);
   const perCollection = Math.max(limit, 5);
 
   const results = await Promise.all(
     options.collections.map(async (collection) => {
       await ensureQdrantCollection(collection.name);
       await ensurePayloadIndexesForGeminiCollection(collection.name);
+      const vectorFormat = await resolveVectorFormat(collection.name);
+      const vector = buildSearchVector(options.embeddingVector, vectorFormat);
       return qdrant.search(collection.name, {
         vector,
         limit: perCollection,
