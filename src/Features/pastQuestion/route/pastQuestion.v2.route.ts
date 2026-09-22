@@ -25,6 +25,10 @@ Router.get("/", (req: Request, res: Response) => {
   PastQuestionV2Controller.tree(req, res);
 });
 
+Router.get("/insights/analytics", (req: Request, res: Response) => {
+  PastQuestionV2Controller.insightAnalytics(req, res);
+});
+
 Router.get("/insights", (req: Request, res: Response) => {
   PastQuestionV2Controller.courseInsights(req, res);
 });

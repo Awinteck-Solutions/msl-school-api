@@ -92,10 +92,12 @@ const getPurpose = (method: string, endpoint: string): string | undefined => {
 
     // Past questions
     { method: "GET", pattern: toRegex("/past-questions"), purpose: "VIEW-PAST-QUESTIONS" },
+    { method: "GET", pattern: toRegex("/past-questions/insights/analytics"), purpose: "VIEW-PAST-QUESTION-INSIGHT-ANALYTICS" },
     { method: "GET", pattern: toRegex("/past-questions/insights"), purpose: "VIEW-PAST-QUESTION-COURSE-INSIGHTS" },
     { method: "GET", pattern: toRegex("/past-questions/:id"), purpose: "VIEW-PAST-QUESTION-PAPER" },
     { method: "GET", pattern: toRegex("/past-questions/:id/insights"), purpose: "VIEW-PAST-QUESTION-INSIGHTS" },
     { method: "POST", pattern: toRegex("/past-questions/chat"), purpose: "QUERY-PAST-QUESTION-AI" },
+    { method: "GET", pattern: toRegex("/admin/past-questions/insights/analytics"), purpose: "VIEW-ADMIN-PAST-QUESTION-INSIGHT-ANALYTICS" },
     { method: "GET", pattern: toRegex("/admin/past-questions"), purpose: "VIEW-ADMIN-PAST-QUESTIONS" },
     { method: "POST", pattern: toRegex("/admin/past-questions"), purpose: "CREATE-PAST-QUESTION" },
     { method: "GET", pattern: toRegex("/admin/past-questions/:id"), purpose: "VIEW-ADMIN-PAST-QUESTION" },

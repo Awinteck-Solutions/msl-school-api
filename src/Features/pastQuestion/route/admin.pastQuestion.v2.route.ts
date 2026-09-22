@@ -33,6 +33,10 @@ Router.post(
   }
 );
 
+Router.get("/insights/analytics", (req: Request, res: Response) => {
+  AdminPastQuestionV2Controller.insightAnalytics(req, res);
+});
+
 Router.get("/", (req: Request, res: Response) => {
   AdminPastQuestionV2Controller.list(req, res);
 });

@@ -19,6 +19,7 @@ import PastQuestionItem from "../schema/pastQuestionItem.schema";
 import PastQuestionPaper from "../schema/pastQuestionPaper.schema";
 import {
   buildBrowseTree,
+  buildPastQuestionAnalytics,
   courseKey,
   findCoursePapers,
   getPastQuestionContext,
@@ -131,6 +132,29 @@ export class PastQuestionV2Controller {
       return res.status(500).json({
         status: false,
         message: "Failed to fetch insights",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  static async insightAnalytics(req: Request, res: Response) {
+    try {
+      const currentUser = req["currentUser"] as { id?: string };
+      const { categoryId } = req.query as Record<string, string>;
+      const response = await buildPastQuestionAnalytics({
+        admin: false,
+        studentId: currentUser?.id,
+        categoryId,
+      });
+      return res.status(200).json({
+        status: true,
+        message: "Past question insight analytics",
+        response,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to build insight analytics",
         error: error?.message || error,
       });
     }

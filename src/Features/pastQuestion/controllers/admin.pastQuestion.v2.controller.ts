@@ -15,6 +15,7 @@ import PastQuestionItem from "../schema/pastQuestionItem.schema";
 import PastQuestionPaper from "../schema/pastQuestionPaper.schema";
 import {
   buildBrowseTree,
+  buildPastQuestionAnalytics,
   deletePastQuestionVectors,
   processPastQuestionPaper,
   publicFileUrl,
@@ -106,6 +107,27 @@ export class AdminPastQuestionV2Controller {
       return res.status(500).json({
         status: false,
         message: "Failed to create past question",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  static async insightAnalytics(req: Request, res: Response) {
+    try {
+      const { categoryId } = req.query as Record<string, string>;
+      const response = await buildPastQuestionAnalytics({
+        admin: true,
+        categoryId,
+      });
+      return res.status(200).json({
+        status: true,
+        message: "Past question insight analytics",
+        response,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to build insight analytics",
         error: error?.message || error,
       });
     }

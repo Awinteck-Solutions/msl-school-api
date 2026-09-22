@@ -17,6 +17,7 @@ import {
   resolveVectorFormat,
   searchAiCollections,
 } from "../../geminiAi/controllers/geminiAi.shared";
+import AiUsage from "../../mslAi/schema/aiUsage.schema";
 import { getUserEnrolledCourseIds } from "../../subscription/controllers/subscription.service";
 import {
   PastQuestionInsightScope,
@@ -406,6 +407,175 @@ export const replacePaperQuestions = async (
   await refreshPaperInsights(String(paper._id)).catch(() => {});
   await refreshCourseInsights(paper).catch(() => {});
   return { paper, items: created };
+};
+
+const normalizeLabel = (value: unknown) =>
+  String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const bumpCount = (
+  map: Map<string, { label: string; count: number; years: Set<number> }>,
+  label: unknown,
+  count: unknown,
+  years: unknown
+) => {
+  const text = normalizeLabel(label);
+  if (!text) return;
+  const key = text.toLowerCase();
+  const current = map.get(key) || { label: text, count: 0, years: new Set<number>() };
+  const weight = Number(count);
+  current.count += Number.isFinite(weight) && weight > 0 ? weight : 1;
+  if (Array.isArray(years)) {
+    years.forEach((year) => {
+      const numeric = Number(year);
+      if (Number.isFinite(numeric)) current.years.add(numeric);
+    });
+  }
+  map.set(key, current);
+};
+
+const ranked = (map: Map<string, { label: string; count: number; years: Set<number> }>, limit: number) =>
+  Array.from(map.values())
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, limit)
+    .map((item) => ({
+      label: item.label,
+      count: item.count,
+      years: Array.from(item.years).sort((a, b) => b - a),
+    }));
+
+export const buildPastQuestionAnalytics = async (options: {
+  admin?: boolean;
+  studentId?: string;
+  categoryId?: string;
+}) => {
+  const paperFilter: Record<string, unknown> = {};
+  if (!options.admin) {
+    paperFilter.status = PastQuestionStatus.ACTIVE;
+    paperFilter.processStatus = PastQuestionProcessStatus.SUCCESS;
+  }
+  if (options.categoryId && mongoose.Types.ObjectId.isValid(options.categoryId)) {
+    paperFilter.categoryId = new mongoose.Types.ObjectId(options.categoryId);
+  }
+
+  const papers = await PastQuestionPaper.find(paperFilter)
+    .select("title year sitting level paperCode status processStatus questionCount")
+    .lean();
+  const paperIds = papers.map((paper: any) => paper._id);
+  const insights = paperIds.length
+    ? await PastQuestionInsight.find({
+        $or: [{ paper: { $in: paperIds } }, { sourcePaperIds: { $in: paperIds } }],
+      }).lean()
+    : [];
+
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const usageMatch: Record<string, unknown> = { source: "past-question" };
+  if (!options.admin && options.studentId && mongoose.Types.ObjectId.isValid(options.studentId)) {
+    usageMatch.student = new mongoose.Types.ObjectId(options.studentId);
+  }
+  const usage = await AiUsage.aggregate([
+    { $match: usageMatch },
+    {
+      $facet: {
+        totals: [
+          {
+            $group: {
+              _id: null,
+              queries: { $sum: 1 },
+              tokens: { $sum: { $ifNull: ["$total_tokens", 0] } },
+            },
+          },
+        ],
+        recent: [{ $match: { createdAt: { $gte: since } } }, { $count: "queries" }],
+        byScope: [
+          {
+            $group: {
+              _id: { $ifNull: ["$metadata.scope", "unknown"] },
+              queries: { $sum: 1 },
+              tokens: { $sum: { $ifNull: ["$total_tokens", 0] } },
+            },
+          },
+          { $sort: { queries: -1 } },
+        ],
+      },
+    },
+  ]);
+  const usageRow = usage[0] || { totals: [], recent: [], byScope: [] };
+
+  const topics = new Map<string, { label: string; count: number; years: Set<number> }>();
+  const repeated = new Map<string, { label: string; count: number; years: Set<number> }>();
+  const trends = new Map<string, { label: string; count: number; years: Set<number> }>();
+  let paperInsights = 0;
+  let courseInsights = 0;
+
+  for (const insight of insights) {
+    if (insight.scope === PastQuestionInsightScope.PAPER) paperInsights += 1;
+    if (insight.scope === PastQuestionInsightScope.COURSE) courseInsights += 1;
+    if (insight.scope !== PastQuestionInsightScope.PAPER) continue;
+    (insight.topics || []).forEach((topic: any) =>
+      bumpCount(topics, topic?.topic || topic, topic?.count, topic?.years)
+    );
+    (insight.repeatedQuestions || []).forEach((item: any) =>
+      bumpCount(repeated, item?.theme || item, item?.count, item?.years)
+    );
+    (insight.trends || []).forEach((item: unknown) => bumpCount(trends, item, 1, []));
+  }
+
+  const statusCounts = papers.reduce((acc: Record<string, number>, paper: any) => {
+    const key = String(paper.processStatus || "UNKNOWN");
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    audience: options.admin ? "admin" : "student",
+    coverage: {
+      papers: papers.length,
+      questions: papers.reduce((sum: number, paper: any) => sum + Number(paper.questionCount || 0), 0),
+      paperInsights,
+      courseInsights,
+      processed: statusCounts[PastQuestionProcessStatus.SUCCESS] || 0,
+      failed: options.admin ? statusCounts[PastQuestionProcessStatus.FAILED] || 0 : undefined,
+      pending: options.admin ? statusCounts[PastQuestionProcessStatus.PENDING] || 0 : undefined,
+      processing: options.admin ? statusCounts[PastQuestionProcessStatus.PROCESSING] || 0 : undefined,
+    },
+    topics: ranked(topics, 12).map((item) => ({
+      topic: item.label,
+      count: item.count,
+      years: item.years,
+    })),
+    repeatedQuestions: ranked(repeated, 8).map((item) => ({
+      theme: item.label,
+      count: item.count,
+      years: item.years,
+    })),
+    trends: ranked(trends, 8).map((item) => ({ text: item.label, count: item.count })),
+    chat: {
+      queries: usageRow.totals[0]?.queries || 0,
+      tokens: usageRow.totals[0]?.tokens || 0,
+      last30Days: usageRow.recent[0]?.queries || 0,
+      byScope: (usageRow.byScope || []).map((row: any) => ({
+        scope: row._id || "unknown",
+        queries: row.queries || 0,
+        tokens: row.tokens || 0,
+      })),
+    },
+    recentInsights: insights
+      .slice()
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.generatedAt || 0).getTime() - new Date(a.generatedAt || 0).getTime()
+      )
+      .slice(0, 8)
+      .map((insight: any) => ({
+        scope: insight.scope,
+        title: insight.title,
+        level: insight.level,
+        paperCode: insight.paperCode,
+        generatedAt: insight.generatedAt,
+      })),
+  };
 };
 
 export const buildBrowseTree = (papers: any[]) => {
