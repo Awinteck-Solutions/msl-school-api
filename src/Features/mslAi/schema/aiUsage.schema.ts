@@ -29,7 +29,7 @@ const aiUsageSchema = new Schema(
     },
     source: {
       type: String,
-      enum: ["course", "subscription"],
+      enum: ["course", "subscription", "past-question"],
       default: "course",
     },
     question: { type: String },

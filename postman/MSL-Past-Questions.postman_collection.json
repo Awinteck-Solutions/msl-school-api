@@ -1,0 +1,186 @@
+{
+  "info": {
+    "_postman_id": "msl-past-questions-v2",
+    "name": "MSL Past Questions",
+    "description": "Past questions grouped category → year → level → papers. Admin uploads a PDF; Gemini extracts questions, answers, and notes. Students browse, chat, and read saved AI insights.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4001" },
+    { "key": "token", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "pastQuestionPaperId", "value": "" },
+    { "key": "pastQuestionItemId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Create paper (multipart PDF)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": [] },
+                { "key": "categoryId", "value": "{{categoryId}}" },
+                { "key": "year", "value": "2026" },
+                { "key": "sitting", "value": "July" },
+                { "key": "level", "value": "2" },
+                { "key": "title", "value": "FINANCIAL REPORTING" },
+                { "key": "paperCode", "value": "2.1" }
+              ]
+            },
+            "url": "{{baseUrl}}/v2/admin/past-questions"
+          }
+        },
+        {
+          "name": "List (tree)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/admin/past-questions?categoryId={{categoryId}}"
+          }
+        },
+        {
+          "name": "Get paper",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}"
+          }
+        },
+        {
+          "name": "Update metadata",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"FINANCIAL REPORTING\",\n  \"paperCode\": \"2.1\",\n  \"sitting\": \"July\",\n  \"level\": \"2\",\n  \"year\": 2026,\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}"
+          }
+        },
+        {
+          "name": "Replace extracted questions",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questions\": [\n    {\n      \"number\": \"1\",\n      \"question\": \"Discuss the recognition criteria for...\",\n      \"answer\": \"Suggested solution...\",\n      \"answerNotes\": \"Candidates lost marks for...\",\n      \"marks\": 20\n    }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/questions"
+          }
+        },
+        {
+          "name": "Reprocess PDF",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/process"
+          }
+        },
+        {
+          "name": "Delete paper",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Student",
+      "item": [
+        {
+          "name": "Browse tree",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/past-questions?categoryId={{categoryId}}"
+          }
+        },
+        {
+          "name": "Get paper + questions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}"
+          }
+        },
+        {
+          "name": "Paper + course insights",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}/insights"
+          }
+        },
+        {
+          "name": "Course insights",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/v2/past-questions/insights?categoryId={{categoryId}}&level=2&paperCode=2.1"
+          }
+        },
+        {
+          "name": "Chat (paper)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What are the common examiner comments on this paper?\",\n  \"scope\": \"paper\",\n  \"paperId\": \"{{pastQuestionPaperId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/v2/past-questions/chat"
+          }
+        },
+        {
+          "name": "Chat (question)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"How should I structure this answer?\",\n  \"scope\": \"question\",\n  \"questionId\": \"{{pastQuestionItemId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/v2/past-questions/chat"
+          }
+        },
+        {
+          "name": "Chat (course across years)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Which topics keep repeating in Financial Reporting?\",\n  \"scope\": \"course\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"level\": \"2\",\n  \"paperCode\": \"2.1\"\n}"
+            },
+            "url": "{{baseUrl}}/v2/past-questions/chat"
+          }
+        }
+      ]
+    }
+  ]
+}

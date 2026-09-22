@@ -90,6 +90,20 @@ const getPurpose = (method: string, endpoint: string): string | undefined => {
     { method: "POST", pattern: toRegex("/subscription-ai/generate-flashcards"), purpose: "GENERATE-SUBSCRIPTION-FLASHCARDS" },
     { method: "POST", pattern: toRegex("/subscription-ai/generate-quiz"), purpose: "GENERATE-SUBSCRIPTION-QUIZ" },
 
+    // Past questions
+    { method: "GET", pattern: toRegex("/past-questions"), purpose: "VIEW-PAST-QUESTIONS" },
+    { method: "GET", pattern: toRegex("/past-questions/insights"), purpose: "VIEW-PAST-QUESTION-COURSE-INSIGHTS" },
+    { method: "GET", pattern: toRegex("/past-questions/:id"), purpose: "VIEW-PAST-QUESTION-PAPER" },
+    { method: "GET", pattern: toRegex("/past-questions/:id/insights"), purpose: "VIEW-PAST-QUESTION-INSIGHTS" },
+    { method: "POST", pattern: toRegex("/past-questions/chat"), purpose: "QUERY-PAST-QUESTION-AI" },
+    { method: "GET", pattern: toRegex("/admin/past-questions"), purpose: "VIEW-ADMIN-PAST-QUESTIONS" },
+    { method: "POST", pattern: toRegex("/admin/past-questions"), purpose: "CREATE-PAST-QUESTION" },
+    { method: "GET", pattern: toRegex("/admin/past-questions/:id"), purpose: "VIEW-ADMIN-PAST-QUESTION" },
+    { method: "PATCH", pattern: toRegex("/admin/past-questions/:id"), purpose: "UPDATE-PAST-QUESTION" },
+    { method: "PUT", pattern: toRegex("/admin/past-questions/:id/questions"), purpose: "UPDATE-PAST-QUESTION-ITEMS" },
+    { method: "POST", pattern: toRegex("/admin/past-questions/:id/process"), purpose: "PROCESS-PAST-QUESTION" },
+    { method: "DELETE", pattern: toRegex("/admin/past-questions/:id"), purpose: "DELETE-PAST-QUESTION" },
+
     // V2 user
     { method: "POST", pattern: toRegex("/user/verify/device"), purpose: "VERIFY-USER-DEVICE" },
     { method: "POST", pattern: toRegex("/user/auth"), purpose: "AUTH-USER" },

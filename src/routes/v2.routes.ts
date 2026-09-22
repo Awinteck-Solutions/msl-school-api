@@ -34,6 +34,8 @@ import adminPaymentRoutes from "../Features/payments/route/admin.payment.v2.rout
 import subscriptionRoutes from "../Features/subscription/route/subscription.v2.route";
 import adminSubscriptionRoutes from "../Features/subscription/route/admin.subscription.v2.route";
 import subscriptionAiRoutes from "../Features/subscription/route/subscriptionAi.v2.route";
+import pastQuestionRoutes from "../Features/pastQuestion/route/pastQuestion.v2.route";
+import adminPastQuestionRoutes from "../Features/pastQuestion/route/admin.pastQuestion.v2.route";
 const Router = express.Router();
 
 Router.use("/user", userV2Routes);
@@ -70,6 +72,8 @@ Router.use("/payment", paymentRoutes);
 Router.use("/subscription", subscriptionRoutes);
 Router.use("/admin/subscription", adminSubscriptionRoutes);
 Router.use("/subscription-ai", subscriptionAiRoutes);
+Router.use("/past-questions", pastQuestionRoutes);
+Router.use("/admin/past-questions", adminPastQuestionRoutes);
 
 
 export { Router as v2Router };

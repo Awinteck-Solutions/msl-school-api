@@ -725,6 +725,10 @@ const PAYLOAD_INDEX_KEYS = [
   "s3Key",
   "pdfKey",
   "resourceId",
+  "paperId",
+  "questionId",
+  "paperCode",
+  "categoryId",
 ] as const;
 
 /**
