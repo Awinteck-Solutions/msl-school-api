@@ -20,20 +20,43 @@ import PastQuestionPaper from "../schema/pastQuestionPaper.schema";
 import {
   buildBrowseTree,
   buildPastQuestionAnalytics,
+  buildCourseTopicFrequency,
   courseKey,
   findCoursePapers,
   getPastQuestionContext,
+  normalizeInsightDocument,
   serializePaper,
 } from "./pastQuestion.service";
 
 const CHAT_SYSTEM_PROMPT = `
 You are a helpful AI assistant for ICAG and MSL past exam questions. Use the provided past-question text and MSL learning context when relevant. You may also use general subject knowledge so the answer is complete and exam-useful.
 
-Never mention sources, context, or training data. Never use asterisk (*).
+Use the conversation history to stay consistent with earlier turns. Do not repeat prior answers unless asked. Never mention sources, context, or training data. Never use asterisk (*).
 Return the final answer ONLY as HTML wrapped in a single <article> element.
 `;
 
 const removeAsterisks = (text: string) => String(text || "").replace(/\*/g, "");
+
+const stripHtml = (value: unknown) =>
+  String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const normalizeChatHistory = (history: unknown, limit = 12) => {
+  if (!Array.isArray(history)) return [] as Array<{ role: "user" | "model"; text: string }>;
+  return history
+    .map((row: any) => {
+      const roleRaw = String(row?.role || "").toLowerCase();
+      const role: "user" | "model" =
+        roleRaw === "assistant" || roleRaw === "model" || roleRaw === "ai" ? "model" : "user";
+      const text = stripHtml(row?.text || row?.content || row?.question || row?.answer || "");
+      if (!text) return null;
+      return { role, text: text.slice(0, 4000) };
+    })
+    .filter(Boolean)
+    .slice(-limit) as Array<{ role: "user" | "model"; text: string }>;
+};
 
 export class PastQuestionV2Controller {
   static async tree(req: Request, res: Response) {
@@ -120,12 +143,20 @@ export class PastQuestionV2Controller {
           ...courseKey(paper),
         }).lean(),
       ]);
+      const coursePapers = await findCoursePapers({
+        categoryId: String(paper.categoryId?._id || paper.categoryId),
+        level: paper.level,
+        paperCode: paper.paperCode || "",
+        title: paper.title || "",
+      });
+      const topicFrequency = await buildCourseTopicFrequency(coursePapers);
       return res.status(200).json({
         status: true,
         message: "Past question insights fetched",
         response: {
-          paper: paperInsight,
-          course: courseInsight,
+          paper: normalizeInsightDocument(paperInsight, paper),
+          course: normalizeInsightDocument(courseInsight, paper),
+          topicFrequency,
         },
       });
     } catch (error: any) {
@@ -189,12 +220,14 @@ export class PastQuestionV2Controller {
         scope: PastQuestionInsightScope.COURSE,
         ...courseKey(sample),
       }).lean();
+      const topicFrequency = await buildCourseTopicFrequency(papers);
       return res.status(200).json({
         status: true,
         message: "Course past-question insights fetched",
         response: {
-          insight,
+          insight: normalizeInsightDocument(insight, sample),
           papers: papers.map((paper: any) => serializePaper(paper)),
+          topicFrequency,
         },
       });
     } catch (error: any) {
@@ -217,6 +250,7 @@ export class PastQuestionV2Controller {
         categoryId,
         level,
         paperCode,
+        history,
       } = req.body as {
         question?: string;
         scope?: string;
@@ -225,6 +259,7 @@ export class PastQuestionV2Controller {
         categoryId?: string;
         level?: string;
         paperCode?: string;
+        history?: unknown;
       };
       if (!currentUser?.id) {
         return res.status(401).json({ status: false, message: "Unauthorized" });
@@ -296,7 +331,36 @@ export class PastQuestionV2Controller {
         item,
         scope: chatScope as "course" | "paper" | "question",
       });
-      const prompt = `${CHAT_SYSTEM_PROMPT}\n\nPast question / MSL context:\n${contextText}\n\nStudent question:\n${question}`;
+
+      let prior = normalizeChatHistory(history);
+      if (!prior.length) {
+        const recent = await AiUsage.find({
+          student: currentUser.id,
+          source: "past-question",
+          queryType: "chat",
+          "metadata.paperId": String(paper._id),
+        })
+          .sort({ createdAt: -1 })
+          .limit(6)
+          .lean();
+        prior = recent
+          .reverse()
+          .flatMap((row: any) => {
+            const turns: Array<{ role: "user" | "model"; text: string }> = [];
+            if (row.question) turns.push({ role: "user", text: stripHtml(row.question).slice(0, 4000) });
+            if (row.answer) turns.push({ role: "model", text: stripHtml(row.answer).slice(0, 4000) });
+            return turns;
+          })
+          .slice(-12);
+      }
+
+      const historyText = prior.length
+        ? prior
+            .map((turn) => `${turn.role === "user" ? "Student" : "Assistant"}: ${turn.text}`)
+            .join("\n\n")
+        : "No prior chat history.";
+
+      const prompt = `${CHAT_SYSTEM_PROMPT}\n\nConversation so far:\n${historyText}\n\nPast question / MSL context:\n${contextText}\n\nStudent question:\n${question}`;
       const completion = await geminiChatModel.generateContent({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
@@ -317,6 +381,7 @@ export class PastQuestionV2Controller {
           scope: chatScope,
           paperId: String(paper._id),
           questionId: item ? String(item._id) : undefined,
+          historyTurns: prior.length,
         },
       }).save();
       recordStudentActivity(currentUser.id, "ai_query", {}).catch(() => {});

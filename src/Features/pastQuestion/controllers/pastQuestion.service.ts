@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import { readFileSync } from "fs";
+import * as path from "path";
 import { v4 as uuidv4 } from "uuid";
 import {
   COLLECTION_NAME,
@@ -43,7 +45,8 @@ Each object must be:
 }
 Split into individual numbered questions. Keep lettered parts together when they belong to one question.`;
 
-const INSIGHTS_PROMPT = `You are an ICAG exam analyst. From the past questions provided, produce one-time study insights.
+const INSIGHTS_PROMPT = `You are an ICAG exam analyst using the official ICAG Professional Qualification Syllabus 2024-2029.
+From the past questions provided, produce one-time study insights.
 Return ONLY JSON with this shape:
 {
   "summary": "2-4 sentence overview",
@@ -52,7 +55,414 @@ Return ONLY JSON with this shape:
   "trends": ["string"],
   "facts": ["string"]
 }
-Count frequency of repeated themes and topics across years. Be specific. If data is thin, still return the keys with empty arrays.`;
+Topic rules:
+- Prefer specific examinable syllabus topics and standards (e.g. "IAS 16 Property, Plant and Equipment", "IFRS 10 Consolidated Financial Statements", "Ratio analysis").
+- Use the final subtopic name only. Never write breadcrumb labels like "Financial reporting > IAS 16 …".
+- Do NOT invent vague umbrella labels when a standard or syllabus area applies.
+- When a syllabus topic list is provided below, choose topic names from that list whenever possible.
+- Count frequency of repeated themes and topics across years. If data is thin, still return the keys with empty arrays.`;
+
+/** Final segment + strip "(H) " syllabus letter prefixes. */
+export const leafTopicLabel = (value: unknown) => {
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  const parts = text.includes(">") ? text.split(/\s*>\s*/) : [text];
+  return (parts[parts.length - 1] || text).replace(/^\(([A-Za-z])\)\s*/, "").trim();
+};
+
+const sittingRank = (sitting = "") => {
+  const s = String(sitting || "");
+  if (/nov|dec/i.test(s)) return 4;
+  if (/aug|sep|sept/i.test(s)) return 3;
+  if (/may|june|jun|july|jul/i.test(s)) return 2;
+  if (/mar|april|apr/i.test(s)) return 1;
+  return 2;
+};
+
+const isTopicEffectiveForSitting = (topic: any, year: unknown, sitting: unknown) => {
+  const from = topic?.effectiveFrom;
+  if (!from?.year) return true;
+  const y = Number(year);
+  const fromY = Number(from.year);
+  if (!Number.isFinite(y) || !Number.isFinite(fromY)) return true;
+  if (y > fromY) return true;
+  if (y < fromY) return false;
+  return sittingRank(String(sitting || "")) >= sittingRank(String(from.sitting || "November"));
+};
+
+type SyllabusTopicRow = {
+  id?: string;
+  label: string;
+  displayLabel?: string;
+  kind?: string;
+  weight?: number;
+  section?: string;
+  standards?: string[];
+  aliases?: string[];
+  aliasOf?: string;
+  effectiveFrom?: { year?: number; sitting?: string };
+  keywords?: string[];
+  negativeKeywords?: string[];
+};
+
+let syllabusCache: any = null;
+const readSyllabus = () => {
+  if (syllabusCache) return syllabusCache;
+  const file = path.join(__dirname, "../data/icagSyllabus.json");
+  syllabusCache = JSON.parse(readFileSync(file, "utf8"));
+  return syllabusCache;
+};
+
+const resolveSyllabusCode = (paper: { paperCode?: string; title?: string }) => {
+  const data = readSyllabus();
+  const code = String(paper.paperCode || "").trim();
+  if (code && data?.resolve?.byCode?.[code]) return code;
+  const alias = String(paper.title || "")
+    .replace(/\s+Solutions?\s*$/i, "")
+    .trim()
+    .toUpperCase();
+  if (alias && data?.resolve?.byAlias?.[alias]) return data.resolve.byAlias[alias];
+  return code;
+};
+
+const loadSyllabusTopicRows = (paper: {
+  paperCode?: string;
+  title?: string;
+  level?: string;
+  year?: number;
+  sitting?: string;
+}): SyllabusTopicRow[] => {
+  try {
+    const data = readSyllabus();
+    const code = resolveSyllabusCode(paper);
+    const entry = data?.papers?.[code];
+    if (!entry?.topics?.length) return [];
+    const byId = new Map(entry.topics.map((topic: any) => [topic.id, topic]));
+    return entry.topics
+      .filter((topic: any) => !topic.aliasOf)
+      .filter((topic: any) => topic.kind !== "syllabus_competency")
+      .filter((topic: any) => isTopicEffectiveForSitting(topic, paper.year, paper.sitting))
+      .map((topic: any) => {
+        const aliases = entry.topics.filter((row: any) => row.aliasOf === topic.id);
+        const leaf = leafTopicLabel(topic.label);
+        return {
+          ...topic,
+          label: leaf,
+          displayLabel: leaf,
+          aliases: Array.from(
+            new Set([
+              ...(topic.aliases || []),
+              ...aliases.map((row: any) => leafTopicLabel(row.label)),
+              ...aliases.flatMap((row: any) => row.aliases || []),
+            ])
+          ),
+          keywords: Array.from(
+            new Set([...(topic.keywords || []), ...aliases.flatMap((row: any) => row.keywords || [])])
+          ),
+          negativeKeywords: Array.from(
+            new Set([
+              ...(topic.negativeKeywords || []),
+              ...aliases.flatMap((row: any) => row.negativeKeywords || []),
+            ])
+          ),
+          canonical: byId.get(topic.id),
+        } as SyllabusTopicRow;
+      });
+  } catch {
+    return [];
+  }
+};
+
+const loadSyllabusTopics = (paper: {
+  paperCode?: string;
+  title?: string;
+  level?: string;
+  year?: number;
+  sitting?: string;
+}) =>
+  loadSyllabusTopicRows(paper)
+    .map((topic) => topic.label)
+    .filter(Boolean);
+
+const WEAK_SCORE_TOKENS = new Set([
+  "tax",
+  "taxes",
+  "taxation",
+  "income",
+  "ghana",
+  "ghanaian",
+  "system",
+  "policy",
+  "issues",
+  "practice",
+  "application",
+  "information",
+  "technology",
+  "liabilities",
+  "administration",
+  "financial",
+  "reporting",
+  "ias",
+  "ifrs",
+  "ipsas",
+]);
+
+const phraseHits = (hay: string, phrases: string[] = []) =>
+  (phrases || [])
+    .map((item) => String(item || "").toLowerCase().trim())
+    .filter((phrase) => {
+      if (phrase.length < 4) return false;
+      if (phrase.includes(" ")) return hay.includes(phrase);
+      return phrase.length >= 6 && !WEAK_SCORE_TOKENS.has(phrase) && hay.includes(phrase);
+    });
+
+const textStds = (text: string) =>
+  (String(text || "").toLowerCase().match(/\b(?:ias|ifrs|ipsas)\s*\d+[a-z]?\b/g) || []).map((item) =>
+    item.replace(/\s+/g, " ").trim()
+  );
+
+export const scoreSyllabusTopic = (topic: SyllabusTopicRow, questionText: string) => {
+  const hay = String(questionText || "").toLowerCase();
+  if (!hay.trim()) return 0;
+
+  const negatives = phraseHits(hay, topic.negativeKeywords || []);
+  // Any negative hit disqualifies the topic — prevents e.g. consolidation Qs matching "single entity".
+  if (negatives.length) return 0;
+
+  let score = 0;
+  const stds = (topic.standards || []).map((item) => item.toLowerCase().replace(/\s+/g, " ").trim());
+  const found = textStds(hay);
+  stds.forEach((std) => {
+    if (found.includes(std) || hay.includes(std)) score += 4.5;
+  });
+  found.forEach((std) => {
+    if ((topic.label || "").toLowerCase().includes(std)) score += 1.25;
+  });
+
+  const keywordHits = phraseHits(hay, topic.keywords || []);
+  if (keywordHits.length) {
+    score += Math.min(4.5, keywordHits.length * 1.35);
+    keywordHits.forEach((hit) => {
+      if (hit.includes(" ")) score += 0.55;
+    });
+  }
+
+  phraseHits(hay, topic.aliases || []).forEach((alias) => {
+    score += alias.includes(" ") || alias.length > 12 ? 2.6 : 1.2;
+  });
+
+  const compact = leafTopicLabel(topic.label).toLowerCase();
+  if (compact.length > 12 && compact.length < 80 && hay.includes(compact)) score += 2.4;
+
+  if (topic.kind === "syllabus_competency") score -= 0.35;
+  return Math.max(0, score);
+};
+
+export const matchSyllabusTopic = (questionText: string, topics: SyllabusTopicRow[], minimum = 1.6) => {
+  let best: SyllabusTopicRow | null = null;
+  let bestScore = minimum;
+  let second = 0;
+  (topics || []).forEach((topic) => {
+    const score = scoreSyllabusTopic(topic, questionText);
+    if (score > bestScore) {
+      second = bestScore;
+      best = topic;
+      bestScore = score;
+    } else if (score > second) {
+      second = score;
+    }
+  });
+  if (best && bestScore - second < 0.45 && bestScore < 3.2) return null;
+  return best ? { topic: best, score: bestScore } : null;
+};
+
+const formatSyllabusDisplay = (topic?: SyllabusTopicRow | null) => {
+  if (!topic) return "";
+  // Title only — omit syllabus grid letters like "(D)".
+  return leafTopicLabel(topic.label || topic.displayLabel || "");
+};
+
+const bareStandardTitle = (label: string) =>
+  leafTopicLabel(label)
+    .replace(/^(?:ias|ifrs|ipsas)\s*\d+[a-z]?\s*/i, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(and|of|the|for|with)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/s\b/g, "")
+    .trim();
+
+const expandStandardLabel = (label: string, rows: SyllabusTopicRow[]) => {
+  const leaf = leafTopicLabel(label);
+  const lower = leaf.toLowerCase();
+  const catalog = rows || [];
+
+  const aliasHit = catalog.find((topic) => {
+    const names = [topic.label, topic.displayLabel, ...(topic.aliases || [])]
+      .filter(Boolean)
+      .map((value) => leafTopicLabel(value).toLowerCase());
+    return names.includes(lower);
+  });
+  if (aliasHit) return formatSyllabusDisplay(aliasHit) || leafTopicLabel(aliasHit.label);
+
+  const stdMatch = leaf.match(/\b((?:ias|ifrs|ipsas)\s*\d+[a-z]?)\b/i);
+  if (stdMatch) {
+    const std = stdMatch[1].toLowerCase().replace(/\s+/g, " ").trim();
+    const pretty = std.replace(/^(ias|ifrs|ipsas)\s+/i, (prefix) => `${prefix.trim().toUpperCase()} `);
+    const hit = catalog.find((topic) =>
+      (topic.standards || []).some((item) => item.toLowerCase().replace(/\s+/g, " ").trim() === std)
+    );
+    if (hit) return formatSyllabusDisplay(hit) || leafTopicLabel(hit.label);
+
+    const byLabel = catalog.find((topic) => topic.label.toLowerCase().startsWith(std));
+    if (byLabel) return formatSyllabusDisplay(byLabel) || leafTopicLabel(byLabel.label);
+
+    try {
+      const titles = readSyllabus()?.standardTitles || {};
+      if (titles[pretty]) return titles[pretty];
+      const key = Object.keys(titles).find((item) => item.toLowerCase() === pretty.toLowerCase());
+      if (key) return titles[key];
+    } catch {
+      /* ignore */
+    }
+    return leaf;
+  }
+
+  // Title without short label, e.g. "Income tax" → "IAS 12 Income Taxes"
+  const lowerBare = bareStandardTitle(leaf);
+  const byBareTitle = catalog.find((topic) => {
+    if (!(topic.standards || []).length && topic.kind !== "standard") return false;
+    const bare = bareStandardTitle(topic.label);
+    return Boolean(bare) && bare === lowerBare;
+  });
+  if (byBareTitle) return formatSyllabusDisplay(byBareTitle) || leafTopicLabel(byBareTitle.label);
+
+  try {
+    const titles = readSyllabus()?.standardTitles || {};
+    const fromDictBare = Object.entries(titles).find(([, title]) => bareStandardTitle(String(title)) === lowerBare);
+    if (fromDictBare) return String(fromDictBare[1]);
+  } catch {
+    /* ignore */
+  }
+
+  return leaf;
+};
+
+const WEAK_TOPIC_TOKENS = new Set([
+  "tax",
+  "taxes",
+  "taxation",
+  "income",
+  "ghana",
+  "ghanaian",
+  "system",
+  "policy",
+  "issues",
+  "practice",
+  "application",
+  "liabilities",
+  "administration",
+]);
+
+const resolveCanonicalTopicLabel = (raw: string, catalog: SyllabusTopicRow[]) => {
+  const leaf = leafTopicLabel(raw);
+  if (!leaf) return "";
+  if (!catalog.length) return expandStandardLabel(leaf, catalog);
+
+  const lower = leaf.toLowerCase();
+  const aliasHit = catalog.find((item) => {
+    const names = [item.label, item.displayLabel, ...(item.aliases || [])]
+      .filter(Boolean)
+      .map((value) => leafTopicLabel(value).toLowerCase());
+    return names.includes(lower);
+  });
+  if (aliasHit) return formatSyllabusDisplay(aliasHit) || leafTopicLabel(aliasHit.label);
+
+  // Phrase alias containment (prefer longer distinctive aliases)
+  let phraseBest: SyllabusTopicRow | null = null;
+  let phraseScore = 0;
+  catalog.forEach((item) => {
+    const phrases = [item.label, ...(item.aliases || [])]
+      .filter(Boolean)
+      .map((value) => leafTopicLabel(value).toLowerCase())
+      .filter((value) => value.length >= 5);
+    phrases.forEach((phrase) => {
+      if (!lower.includes(phrase) && !phrase.includes(lower)) return;
+      const weak = phrase
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean)
+        .every((token) => WEAK_TOPIC_TOKENS.has(token) || token.length <= 3);
+      if (weak) return;
+      const score = phrase.length + (lower === phrase ? 20 : lower.includes(phrase) ? 8 : 3);
+      if (score > phraseScore) {
+        phraseScore = score;
+        phraseBest = item;
+      }
+    });
+  });
+  if (phraseBest && phraseScore >= 14) {
+    return formatSyllabusDisplay(phraseBest) || leafTopicLabel(phraseBest.label);
+  }
+
+  const expanded = expandStandardLabel(leaf, catalog);
+  if (expanded !== leaf) return expanded;
+
+  // Standards / distinctive keyword match only (avoid generic "tax"/"income")
+  let best: SyllabusTopicRow | null = null;
+  let bestScore = 0;
+  catalog.forEach((item) => {
+    let score = 0;
+    (item.standards || []).forEach((std) => {
+      if (lower.includes(String(std).toLowerCase())) score += 5;
+    });
+    const keywords = (item.keywords || [])
+      .map((value) => String(value).toLowerCase())
+      .filter((value) => value.length > 4 && !WEAK_TOPIC_TOKENS.has(value));
+    const keywordHits = keywords.filter((word) => lower.includes(word)).length;
+    if (keywords.length) score += (keywordHits / Math.min(keywords.length, 8)) * 2.5;
+    if (item.kind === "standard") score += 0.25;
+    if (score > bestScore) {
+      bestScore = score;
+      best = item;
+    }
+  });
+  if (best && bestScore >= 2.2) return formatSyllabusDisplay(best) || leafTopicLabel(best.label);
+  return leaf;
+};
+
+const normalizeTopicRows = (rows: unknown[], paper?: { paperCode?: string; title?: string; year?: number; sitting?: string }) => {
+  const catalog = paper ? loadSyllabusTopicRows(paper) : [];
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      if (row == null) return null;
+      const raw = typeof row === "string" ? row : (row as any).topic || (row as any).label || "";
+      const topic = resolveCanonicalTopicLabel(String(raw), catalog);
+      if (!topic) return null;
+      if (typeof row === "string") return { topic, count: 1, years: [] as number[] };
+      return {
+        ...(row as Record<string, unknown>),
+        topic,
+      };
+    })
+    .filter(Boolean);
+};
+
+export const normalizeInsightDocument = (insight: any, paper?: any) => {
+  if (!insight) return insight;
+  const plain = typeof insight.toObject === "function" ? insight.toObject() : { ...insight };
+  const ref = paper || {
+    paperCode: plain.paperCode,
+    title: plain.title,
+    year: plain.year,
+    sitting: plain.sitting,
+  };
+  return {
+    ...plain,
+    topics: normalizeTopicRows(plain.topics || [], ref),
+  };
+};
 
 const parseJson = (raw: string) => {
   let jsonStr = String(raw || "").trim();
@@ -193,14 +603,24 @@ export const extractQuestionsFromText = async (text: string) => {
     }));
 };
 
-const generateInsightPayload = async (label: string, corpus: string) => {
+const generateInsightPayload = async (
+  label: string,
+  corpus: string,
+  syllabusTopics: string[] = [],
+  paper?: { paperCode?: string; title?: string; year?: number; sitting?: string }
+) => {
+  const topicGuide = syllabusTopics.length
+    ? `\n\nPreferred ICAG syllabus topics for this paper (use these names when they fit):\n- ${syllabusTopics.join(
+        "\n- "
+      )}`
+    : "";
   const completion = await geminiChatModel.generateContent({
     contents: [
       {
         role: "user",
         parts: [
           {
-            text: `${INSIGHTS_PROMPT}\n\n${label}\n\n${corpus.slice(0, 140000)}`,
+            text: `${INSIGHTS_PROMPT}${topicGuide}\n\n${label}\n\n${corpus.slice(0, 140000)}`,
           },
         ],
       },
@@ -212,7 +632,7 @@ const generateInsightPayload = async (label: string, corpus: string) => {
     repeatedQuestions: Array.isArray(parsed?.repeatedQuestions)
       ? parsed.repeatedQuestions
       : [],
-    topics: Array.isArray(parsed?.topics) ? parsed.topics : [],
+    topics: normalizeTopicRows(Array.isArray(parsed?.topics) ? parsed.topics : [], paper),
     trends: Array.isArray(parsed?.trends)
       ? parsed.trends.map((item: unknown) => String(item))
       : [],
@@ -240,7 +660,9 @@ export const refreshPaperInsights = async (paperId: string) => {
   });
   const payload = await generateInsightPayload(
     `Paper: ${paper.title} ${paper.paperCode} ${paper.sitting} ${paper.year} Level ${paper.level}`,
-    itemCorpus(items, paper) || paper.extractedText || ""
+    itemCorpus(items, paper) || paper.extractedText || "",
+    loadSyllabusTopics(paper),
+    paper
   );
   return PastQuestionInsight.findOneAndUpdate(
     { scope: PastQuestionInsightScope.PAPER, paper: paper._id },
@@ -297,7 +719,21 @@ export const refreshCourseInsights = async (paper: {
     `Course paper ${paper.title || ""} ${key.paperCode} Level ${key.level} across ${papers
       .map((row: any) => `${row.sitting || ""} ${row.year}`.trim())
       .join(", ")}`,
-    corpus
+    corpus,
+    loadSyllabusTopicRows(paper)
+      .concat(
+        papers.flatMap((row: any) =>
+          loadSyllabusTopicRows({
+            paperCode: row.paperCode || paper.paperCode,
+            title: row.title || paper.title,
+            year: row.year,
+            sitting: row.sitting,
+          })
+        )
+      )
+      .map((topic) => topic.label)
+      .filter((label, index, all) => label && all.indexOf(label) === index),
+    paper
   );
 
   return PastQuestionInsight.findOneAndUpdate(
@@ -409,10 +845,7 @@ export const replacePaperQuestions = async (
   return { paper, items: created };
 };
 
-const normalizeLabel = (value: unknown) =>
-  String(value || "")
-    .replace(/\s+/g, " ")
-    .trim();
+const normalizeLabel = (value: unknown) => leafTopicLabel(value);
 
 const bumpCount = (
   map: Map<string, { label: string; count: number; years: Set<number> }>,
@@ -640,6 +1073,221 @@ export const serializePaper = (paper: any, extra: Record<string, unknown> = {}) 
   updatedAt: paper.updatedAt,
   ...extra,
 });
+
+const topicKey = (value: unknown) => {
+  const raw = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const standard = raw.match(/\b(?:ifrs|ias|ipsas)\s*\d+[a-z]?\b/);
+  if (standard) return standard[0].replace(/\s+/g, " ");
+  return raw;
+};
+
+export const classifyQuestionTopics = (
+  items: Array<{ number?: string; question?: string; marks?: number | null }>,
+  paper: { paperCode?: string; title?: string; year?: number; sitting?: string }
+) => {
+  const all = loadSyllabusTopicRows(paper);
+  const sectionsOrStandards = all.filter(
+    (topic) => topic.kind === "syllabus_section" || topic.kind === "standard" || (topic.standards || []).length
+  );
+  const kbTopics = all.filter((topic) => topic.kind === "kb_topic");
+  // Prefer official sections/standards; fall back to kb topics when a paper has no section map.
+  const catalog = sectionsOrStandards.length
+    ? sectionsOrStandards
+    : kbTopics.length
+      ? kbTopics
+      : all;
+  const buckets = new Map<
+    string,
+    { topic: string; count: number; years: number[]; questionNumbers: string[] }
+  >();
+
+  (items || []).forEach((item) => {
+    const matched = matchSyllabusTopic(String(item.question || ""), catalog, 1.5);
+    if (!matched) return;
+    const label = formatSyllabusDisplay(matched.topic) || leafTopicLabel(matched.topic.label);
+    const key = topicKey(label);
+    if (!key) return;
+    const next = buckets.get(key) || {
+      topic: label,
+      count: 0,
+      years: paper.year ? [Number(paper.year)] : [],
+      questionNumbers: [] as string[],
+    };
+    next.count += 1;
+    if (item.number) next.questionNumbers.push(String(item.number));
+    buckets.set(key, next);
+  });
+
+  return Array.from(buckets.values()).sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic));
+};
+
+export const rebuildPaperInsightTopics = async (paperId: string) => {
+  const paper = await PastQuestionPaper.findById(paperId);
+  if (!paper) return null;
+  const items = await PastQuestionItem.find({ paper: paper._id }).sort({ order: 1 }).lean();
+  const topics = classifyQuestionTopics(items, paper);
+  return PastQuestionInsight.findOneAndUpdate(
+    { scope: PastQuestionInsightScope.PAPER, paper: paper._id },
+    {
+      $set: {
+        topics,
+        generatedAt: new Date(),
+      },
+    },
+    { new: true }
+  );
+};
+
+const mapTopicToSyllabusLabel = (label: string, allowed: string[], rows: SyllabusTopicRow[] = []) => {
+  const leaf = leafTopicLabel(label);
+  if (!allowed.length && !rows.length) return leaf;
+  const catalog = rows.length ? rows : allowed.map((item) => ({ label: item } as SyllabusTopicRow));
+  const resolved = resolveCanonicalTopicLabel(leaf, catalog as SyllabusTopicRow[]);
+  if (resolved !== leaf) return resolved;
+  const lower = leaf.toLowerCase();
+  const std = (lower.match(/\b(?:ifrs|ias|ipsas)\s*\d+[a-z]?\b/) || [])[0];
+  if (std) {
+    const hit = (catalog as SyllabusTopicRow[]).find(
+      (item) =>
+        item.label.toLowerCase().includes(std) ||
+        (item.standards || []).some((code) => String(code).toLowerCase().includes(std))
+    );
+    if (hit) return formatSyllabusDisplay(hit) || leafTopicLabel(hit.label);
+  }
+  let best: SyllabusTopicRow | null = null;
+  let bestScore = 0;
+  (catalog as SyllabusTopicRow[]).forEach((item) => {
+    const words = item.label
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word.length > 3);
+    if (!words.length) return;
+    const hits = words.filter((word) => lower.includes(word)).length;
+    const score = hits / words.length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = item;
+    }
+  });
+  if (best && bestScore >= 0.45) return formatSyllabusDisplay(best) || leafTopicLabel(best.label);
+  return leaf;
+};
+
+export const buildCourseTopicFrequency = async (papers: any[]) => {
+  if (!papers?.length) {
+    return {
+      sittings: 0,
+      topics: [] as Array<{
+        topic: string;
+        questions: number;
+        sittings: number;
+        years: number[];
+        sittingLabels: string[];
+      }>,
+    };
+  }
+
+  const sample = papers[0];
+  const syllabusRows = Array.from(
+    new Map(
+      papers
+        .flatMap((paper) =>
+          loadSyllabusTopicRows({
+            paperCode: paper.paperCode || sample?.paperCode,
+            title: paper.title || sample?.title,
+            year: paper.year,
+            sitting: paper.sitting,
+          })
+        )
+        .map((topic) => [topic.label.toLowerCase(), topic])
+    ).values()
+  );
+  const syllabusTopics = syllabusRows.map((topic) => topic.label);
+
+  const paperIds = papers.map((paper) => paper._id);
+  const paperById = new Map(papers.map((paper) => [String(paper._id), paper]));
+  const insights = await PastQuestionInsight.find({
+    scope: PastQuestionInsightScope.PAPER,
+    paper: { $in: paperIds },
+  }).lean();
+
+  const buckets = new Map<
+    string,
+    {
+      topic: string;
+      questions: number;
+      years: Set<number>;
+      sittingKeys: Set<string>;
+      sittingLabels: Set<string>;
+      paperIds: Set<string>;
+    }
+  >();
+
+  insights.forEach((insight: any) => {
+    const paper = paperById.get(String(insight.paper));
+    if (!paper) return;
+    const year = Number(paper.year) || Number((insight.years || [])[0]) || 0;
+    const sittingLabel = [paper.sitting, paper.year].filter(Boolean).join(" ").trim();
+    const sittingKey = `${paper.year}|${paper.sitting || ""}|${paper._id}`;
+    (insight.topics || []).forEach((row: any) => {
+      const raw = String(row?.topic || row || "").trim();
+      if (!raw) return;
+      const label = mapTopicToSyllabusLabel(raw, syllabusTopics, syllabusRows);
+      const key = topicKey(label);
+      if (!key) return;
+      // Skip topics not effective for this sitting
+      const topicMeta = syllabusRows.find(
+        (item) => leafTopicLabel(item.label).toLowerCase() === label.toLowerCase()
+      );
+      if (topicMeta && !isTopicEffectiveForSitting(topicMeta, paper.year, paper.sitting)) return;
+      const next = buckets.get(key) || {
+        topic: label,
+        questions: 0,
+        years: new Set<number>(),
+        sittingKeys: new Set<string>(),
+        sittingLabels: new Set<string>(),
+        paperIds: new Set<string>(),
+      };
+      if (label.length >= next.topic.length) next.topic = label;
+      next.questions += Math.max(1, Number(row?.count) || 1);
+      if (year) next.years.add(year);
+      (Array.isArray(row?.years) ? row.years : []).forEach((value: unknown) => {
+        const parsed = Number(value);
+        if (parsed) next.years.add(parsed);
+      });
+      next.sittingKeys.add(sittingKey);
+      next.paperIds.add(String(paper._id));
+      if (sittingLabel) next.sittingLabels.add(sittingLabel);
+      buckets.set(key, next);
+    });
+  });
+
+  return {
+    sittings: papers.length,
+    topics: Array.from(buckets.values())
+      .map((item) => ({
+        topic: item.topic,
+        questions: item.questions,
+        sittings: item.sittingKeys.size,
+        years: Array.from(item.years).sort((a, b) => a - b),
+        sittingLabels: Array.from(item.sittingLabels).sort((a, b) => {
+          const yearA = Number(String(a).match(/\d{4}/)?.[0] || 0);
+          const yearB = Number(String(b).match(/\d{4}/)?.[0] || 0);
+          return yearB - yearA || String(a).localeCompare(String(b));
+        }),
+        paperIds: Array.from(item.paperIds),
+      }))
+      .sort(
+        (a, b) =>
+          b.sittings - a.sittings ||
+          b.questions - a.questions ||
+          a.topic.localeCompare(b.topic)
+      ),
+  };
+};
 
 export const getGeneralRagCollections = async (
   email?: string,
