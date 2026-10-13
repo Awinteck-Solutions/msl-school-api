@@ -6,6 +6,7 @@
    "devDependencies": {
       "@types/express": "^5.0.0",
       "@types/node": "^25.0.10",
+      "mongodb-memory-server": "^11.3.0",
       "nodemon": "^3.1.9",
       "ts-node": "^10.9.1",
       "typescript": "^5.6.3"
@@ -66,6 +67,8 @@
       "build": "tsc",
       "dev": "nodemon src/app.ts",
       "change-course-id": "ts-node src/scripts/changeCourseId.ts",
+      "test:all-students-usage": "ts-node --transpile-only tests/allStudentsUsage.equivalence.ts",
+      "ensure-ai-usage-index": "ts-node src/scripts/ensureAiUsageCreatedAtIndex.ts",
       "type-start": "ts-node src/app.ts",
       "typeorm": "typeorm-ts-node-commonjs"
    }

@@ -81,6 +81,9 @@ const backfillCourseIdsJobState = {
   lastError: null as string | null,
 };
 
+const escapeLiteralRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export class AdminGeminiAiV2Controller {
   static async listPdfs(req: Request, res: Response) {
     try {
@@ -1868,12 +1871,11 @@ export class AdminGeminiAiV2Controller {
         });
       }
 
-      let globalLimits = await GlobalAiLimit.findOne({});
-      if (!globalLimits) {
-        globalLimits = {
-          dailyLimit: 10,
-          monthlyLimit: 100,
-        } as any;
+      if (limit < 1 || limit > 100) {
+        return res.status(400).json({
+          success: false,
+          message: "Limit must be between 1 and 100",
+        });
       }
 
       const today = new Date();
@@ -1892,23 +1894,23 @@ export class AdminGeminiAiV2Controller {
         999
       );
 
-      const monthlyUsageAgg = await AiUsage.aggregate([
-        {
-          $match: {
-            createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-          },
-        },
-        {
-          $group: {
-            _id: "$student",
-            count: { $sum: 1 },
-          },
-        },
+      const monthMatch = {
+        createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+      };
+
+      const [globalLimitsDoc, monthHasUsage] = await Promise.all([
+        GlobalAiLimit.findOne({}),
+        AiUsage.exists(monthMatch),
       ]);
 
-      const studentIdsWithUsage = monthlyUsageAgg.map((item) => item._id);
+      const globalLimits =
+        globalLimitsDoc ||
+        ({
+          dailyLimit: 10,
+          monthlyLimit: 100,
+        } as any);
 
-      if (studentIdsWithUsage.length === 0) {
+      if (!monthHasUsage) {
         return res.status(200).json({
           success: true,
           message: "No students used AI this month",
@@ -1930,104 +1932,148 @@ export class AdminGeminiAiV2Controller {
         });
       }
 
-      const userQuery: Record<string, any> = {
-        _id: { $in: studentIdsWithUsage },
-      };
-
-      if (search) {
-        userQuery.$or = [
-          { email: { $regex: search, $options: "i" } },
-          { firstname: { $regex: search, $options: "i" } },
-          { lastname: { $regex: search, $options: "i" } },
-          {
-            $expr: {
-              $regexMatch: {
-                input: { $concat: ["$firstname", " ", "$lastname"] },
-                regex: search,
-                options: "i",
-              },
+      const pipeline: mongoose.PipelineStage[] = [
+        { $match: monthMatch },
+        { $group: { _id: "$student" } },
+        {
+          $lookup: {
+            from: User.collection.name,
+            localField: "_id",
+            foreignField: "_id",
+            as: "user",
+          },
+        },
+        { $unwind: "$user" },
+        {
+          $project: {
+            user: {
+              _id: "$user._id",
+              email: "$user.email",
+              firstname: "$user.firstname",
+              lastname: "$user.lastname",
+              image: "$user.image",
+              ai_limit: "$user.ai_limit",
+              createdAt: "$user.createdAt",
             },
           },
-        ];
+        },
+      ];
+
+      if (search) {
+        const searchRegex = escapeLiteralRegex(search);
+        pipeline.push({
+          $match: {
+            $or: [
+              { "user.email": { $regex: searchRegex, $options: "i" } },
+              { "user.firstname": { $regex: searchRegex, $options: "i" } },
+              { "user.lastname": { $regex: searchRegex, $options: "i" } },
+              {
+                $expr: {
+                  $regexMatch: {
+                    input: {
+                      $concat: ["$user.firstname", " ", "$user.lastname"],
+                    },
+                    regex: searchRegex,
+                    options: "i",
+                  },
+                },
+              },
+            ],
+          },
+        });
       }
 
-      const totalUsers = await User.countDocuments(userQuery);
-
-      const users = await User.find(userQuery)
-        .select("_id email firstname lastname image ai_limit createdAt")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit);
-
-      const userIds = users.map((user: any) => user._id);
-
-      const dailyUsageAgg = await AiUsage.aggregate([
+      pipeline.push(
+        { $sort: { "user.createdAt": -1, "user._id": -1 } },
         {
-          $match: {
-            student: { $in: userIds },
-            createdAt: { $gte: today, $lt: tomorrow },
+          $facet: {
+            metadata: [{ $count: "total" }],
+            data: [{ $skip: skip }, { $limit: limit }],
           },
-        },
-        {
-          $group: {
-            _id: "$student",
-            count: { $sum: 1 },
-          },
-        },
-      ]);
+        }
+      );
 
-      const monthlyUsageAggPage = await AiUsage.aggregate([
-        {
-          $match: {
-            student: { $in: userIds },
-            createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-          },
-        },
-        {
-          $group: {
-            _id: "$student",
-            count: { $sum: 1 },
-          },
-        },
-      ]);
+      const aggregated = await AiUsage.aggregate(pipeline).allowDiskUse(true);
+      const pageResult = aggregated[0] || { metadata: [], data: [] };
+      const totalUsers = pageResult.metadata?.[0]?.total || 0;
+      const pageRows = pageResult.data || [];
+      const orderedIds = pageRows.map((row: { user: { _id: unknown } }) => row.user._id);
 
-      const totalUsageAgg = await AiUsage.aggregate([
-        {
-          $match: {
-            student: { $in: userIds },
-          },
-        },
-        {
-          $group: {
-            _id: "$student",
-            count: { $sum: 1 },
-          },
-        },
-      ]);
+      const usageByStudent: Record<
+        string,
+        { daily: number; monthly: number; total: number }
+      > = {};
+      let users: any[] = [];
 
-      const dailyUsageMap: Record<string, number> = {};
-      dailyUsageAgg.forEach((item) => {
-        dailyUsageMap[item._id.toString()] = item.count;
-      });
+      if (orderedIds.length > 0) {
+        const [foundUsers, usageAgg] = await Promise.all([
+          User.find({ _id: { $in: orderedIds } }).select(
+            "_id email firstname lastname image ai_limit createdAt"
+          ),
+          AiUsage.aggregate([
+            { $match: { student: { $in: orderedIds } } },
+            {
+              $group: {
+                _id: "$student",
+                total: { $sum: 1 },
+                daily: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $gte: ["$createdAt", today] },
+                          { $lt: ["$createdAt", tomorrow] },
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                monthly: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $gte: ["$createdAt", startOfMonth] },
+                          { $lte: ["$createdAt", endOfMonth] },
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
+          ]).allowDiskUse(true),
+        ]);
 
-      const monthlyUsageMap: Record<string, number> = {};
-      monthlyUsageAggPage.forEach((item) => {
-        monthlyUsageMap[item._id.toString()] = item.count;
-      });
+        const usersById = new Map(
+          foundUsers.map((user: any) => [user._id.toString(), user])
+        );
+        users = orderedIds
+          .map((id: any) => usersById.get(id.toString()))
+          .filter(Boolean);
 
-      const totalUsageMap: Record<string, number> = {};
-      totalUsageAgg.forEach((item) => {
-        totalUsageMap[item._id.toString()] = item.count;
-      });
+        usageAgg.forEach((item) => {
+          usageByStudent[item._id.toString()] = {
+            daily: item.daily,
+            monthly: item.monthly,
+            total: item.total,
+          };
+        });
+      }
 
       const studentsWithUsage = users.map((user: any) => {
         const dailyLimit = user.ai_limit?.dailyLimit || globalLimits.dailyLimit;
         const monthlyLimit =
           user.ai_limit?.monthlyLimit || globalLimits.monthlyLimit;
-
-        const dailyUsage = dailyUsageMap[user._id.toString()] || 0;
-        const monthlyUsage = monthlyUsageMap[user._id.toString()] || 0;
-        const totalUsage = totalUsageMap[user._id.toString()] || 0;
+        const counts = usageByStudent[user._id.toString()] || {
+          daily: 0,
+          monthly: 0,
+          total: 0,
+        };
 
         return {
           student: {
@@ -2041,24 +2087,24 @@ export class AdminGeminiAiV2Controller {
           },
           usage: {
             daily: {
-              used: dailyUsage,
+              used: counts.daily,
               limit: dailyLimit,
-              remaining: Math.max(0, dailyLimit - dailyUsage),
+              remaining: Math.max(0, dailyLimit - counts.daily),
               percentage:
                 dailyLimit > 0
-                  ? Math.round((dailyUsage / dailyLimit) * 100)
+                  ? Math.round((counts.daily / dailyLimit) * 100)
                   : 0,
             },
             monthly: {
-              used: monthlyUsage,
+              used: counts.monthly,
               limit: monthlyLimit,
-              remaining: Math.max(0, monthlyLimit - monthlyUsage),
+              remaining: Math.max(0, monthlyLimit - counts.monthly),
               percentage:
                 monthlyLimit > 0
-                  ? Math.round((monthlyUsage / monthlyLimit) * 100)
+                  ? Math.round((counts.monthly / monthlyLimit) * 100)
                   : 0,
             },
-            total: totalUsage,
+            total: counts.total,
           },
           limits: {
             isUsingGlobalLimits:

@@ -18,7 +18,7 @@ const subscriptionPlanSchema = new Schema(
     isActive: { type: Boolean, required: true, default: false },
     description: {
       type: String,
-      default: "Monthly AI subscription for users without course enrollment",
+      default: "Monthly AI subscription for past questions and AI usage limits",
     },
     updatedBy: { type: String, default: "system" },
   },

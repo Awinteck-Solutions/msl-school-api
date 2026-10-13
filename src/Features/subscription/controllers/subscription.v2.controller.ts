@@ -111,12 +111,16 @@ export class SubscriptionV2Controller {
             userId: new mongoose.Types.ObjectId(currentUser.id),
           }).sort({ createdAt: -1 });
 
+      const hasAccess = isSubscriptionAccessActive(latest);
       return res.status(200).json({
         status: true,
         message: "Subscription status fetched",
         response: {
-          canSubscribe: !(await hasActiveCourseEnrollment(currentUser.email)),
-          hasAccess: isSubscriptionAccessActive(latest),
+          canSubscribe: !hasAccess,
+          hasAccess,
+          hasActiveCourseEnrollment: await hasActiveCourseEnrollment(
+            currentUser.email
+          ),
           subscription: serializeSubscription(latest),
         },
       });

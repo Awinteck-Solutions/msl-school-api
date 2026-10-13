@@ -1223,7 +1223,7 @@ export const checkSubscriptionAiLimits = async (studentId: string) => {
           monthlyAiLimit: 100,
           isActive: false,
           description:
-            "Monthly AI subscription for users without course enrollment",
+            "Monthly AI subscription for past questions and AI usage limits",
         },
       },
       { upsert: true, new: true }

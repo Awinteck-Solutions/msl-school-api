@@ -70,7 +70,7 @@ export const getOrCreateSubscriptionPlan = async () => {
         monthlyAiLimit: 100,
         isActive: false,
         description:
-          "Monthly AI subscription for users without course enrollment",
+          "Monthly AI subscription for past questions and AI usage limits",
       },
     },
     { upsert: true, new: true }
@@ -333,15 +333,6 @@ export const startSubscriptionCheckout = async (params: {
   if (!plan.amount || plan.amount <= 0) {
     const error: any = new Error(
       "Subscription plan price is not configured. An admin must set amount > 0 on PUT /v2/admin/subscription/plan"
-    );
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const hasCourses = await hasActiveCourseEnrollment(params.email);
-  if (hasCourses) {
-    const error: any = new Error(
-      "Users enrolled in an active course cannot subscribe. Course access already includes AI features."
     );
     error.statusCode = 400;
     throw error;
