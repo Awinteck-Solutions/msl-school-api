@@ -2,12 +2,14 @@
   "info": {
     "_postman_id": "msl-past-questions-v2",
     "name": "MSL Past Questions",
-    "description": "Past questions grouped category → year → level → papers. Admin uploads a PDF; Gemini extracts questions, answers, and notes. Students browse, chat, and read saved AI insights.",
+    "description": "Student and admin past-question APIs.\n\nBase path: {{baseUrl}}/v2. Set baseUrl to the API origin with no trailing slash (local default in the main MSL collection is http://localhost:4000).\n\nEvery request needs:\n- Authorization: Bearer {{token}}\n- x-device-id: {{deviceId}} — required. Must match the signed-in user's stored device_id, or the API returns 403 \"You've been logged out\".\n- x-timezone: {{timezone}} — optional. Sent by the app and recorded with student activity. Defaults to UTC.\n\nStudent routes allow USER and ADMIN, and also require an active course enrollment or an active AI subscription. Admin routes allow ADMIN only.\n\nChat is limited to 10 requests per minute.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:4001" },
+    { "key": "baseUrl", "value": "http://localhost:4000" },
     { "key": "token", "value": "" },
+    { "key": "deviceId", "value": "" },
+    { "key": "timezone", "value": "UTC" },
     { "key": "categoryId", "value": "" },
     { "key": "pastQuestionPaperId", "value": "" },
     { "key": "pastQuestionItemId", "value": "" }
@@ -15,41 +17,157 @@
   "item": [
     {
       "name": "Admin",
+      "description": "ADMIN role. Mounted at /v2/admin/past-questions.",
       "item": [
         {
           "name": "Create paper (multipart PDF)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "description": "Admin JWT." },
+              { "key": "x-device-id", "value": "{{deviceId}}", "description": "Required. Must match the admin user's device_id." },
+              { "key": "x-timezone", "value": "{{timezone}}", "description": "Optional. IANA timezone, for example Africa/Accra." }
+            ],
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "file", "type": "file", "src": [] },
-                { "key": "categoryId", "value": "{{categoryId}}" },
-                { "key": "year", "value": "2026" },
-                { "key": "sitting", "value": "July" },
-                { "key": "level", "value": "2" },
-                { "key": "title", "value": "FINANCIAL REPORTING" },
-                { "key": "paperCode", "value": "2.1" }
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Required. PDF only (application/pdf or a .pdf filename). Max 80 MB. Field name must be file."
+                },
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "type": "text",
+                  "description": "Required. Category ObjectId."
+                },
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "type": "text",
+                  "description": "Required. Sitting year."
+                },
+                {
+                  "key": "level",
+                  "value": "2",
+                  "type": "text",
+                  "description": "Required. Level string, for example 2."
+                },
+                {
+                  "key": "title",
+                  "value": "FINANCIAL REPORTING",
+                  "type": "text",
+                  "description": "Required. Paper title."
+                },
+                {
+                  "key": "sitting",
+                  "value": "July",
+                  "type": "text",
+                  "description": "Optional. Exam sitting. Stored as an empty string when omitted."
+                },
+                {
+                  "key": "paperCode",
+                  "value": "2.1",
+                  "type": "text",
+                  "description": "Optional. Course paper code. Stored as an empty string when omitted."
+                }
               ]
             },
-            "url": "{{baseUrl}}/v2/admin/past-questions"
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "past-questions"]
+            },
+            "description": "Uploads a PDF and starts extraction. Do not set Content-Type; Postman adds the multipart boundary.\n\nRequired form fields: file, categoryId, year, level, title.\nOptional form fields: sitting, paperCode.\n\nReturns 201. Extraction continues in the background."
           }
         },
         {
-          "name": "List (tree)",
+          "name": "List papers",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/v2/admin/past-questions?categoryId={{categoryId}}"
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions?categoryId={{categoryId}}&year=&level=&processStatus=",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "past-questions"],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "description": "Optional. Category ObjectId. Invalid or empty values are ignored."
+                },
+                {
+                  "key": "year",
+                  "value": "",
+                  "description": "Optional. Numeric year, for example 2026. Empty is ignored."
+                },
+                {
+                  "key": "level",
+                  "value": "",
+                  "description": "Optional. Exact level string, for example 2. Empty is ignored."
+                },
+                {
+                  "key": "processStatus",
+                  "value": "",
+                  "description": "Optional. One of PENDING, PROCESSING, SUCCESS, FAILED. Empty returns every status, including papers that are not yet extracted."
+                }
+              ]
+            },
+            "description": "Admin browse tree. Includes papers that are still pending or failed, unlike the student tree."
+          }
+        },
+        {
+          "name": "Insight analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/insights/analytics?categoryId={{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "past-questions", "insights", "analytics"],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "description": "Optional. Category ObjectId. Empty includes every category. Admin analytics count all students' past-question AI usage."
+                }
+              ]
+            },
+            "description": "Topic, repeat, trend, and AI-usage analytics across papers. This path must stay ahead of /:id."
           }
         },
         {
           "name": "Get paper",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}"
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}"],
+              "variable": [
+                {
+                  "key": "pastQuestionPaperId",
+                  "value": "{{pastQuestionPaperId}}",
+                  "description": "Paper ObjectId."
+                }
+              ]
+            },
+            "description": "Returns the paper, including inactive papers, plus extracted questions ordered by order."
           }
         },
         {
@@ -58,13 +176,21 @@
             "method": "PATCH",
             "header": [
               { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"FINANCIAL REPORTING\",\n  \"paperCode\": \"2.1\",\n  \"sitting\": \"July\",\n  \"level\": \"2\",\n  \"year\": 2026,\n  \"status\": \"ACTIVE\"\n}"
+              "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"title\": \"FINANCIAL REPORTING\",\n  \"paperCode\": \"2.1\",\n  \"sitting\": \"July\",\n  \"level\": \"2\",\n  \"year\": 2026,\n  \"status\": \"ACTIVE\"\n}",
+              "options": { "raw": { "language": "json" } }
             },
-            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}"
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}"]
+            },
+            "description": "Partial update. Only fields you send are changed.\n\nBody fields, all optional:\n- categoryId: ObjectId. Ignored when it is not a valid id.\n- title: string\n- paperCode: string\n- sitting: string\n- level: string\n- year: number\n- status: ACTIVE or DEACTIVE. Any other value is ignored."
           }
         },
         {
@@ -73,66 +199,192 @@
             "method": "PUT",
             "header": [
               { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"questions\": [\n    {\n      \"number\": \"1\",\n      \"question\": \"Discuss the recognition criteria for...\",\n      \"answer\": \"Suggested solution...\",\n      \"answerNotes\": \"Candidates lost marks for...\",\n      \"marks\": 20\n    }\n  ]\n}"
+              "raw": "{\n  \"questions\": [\n    {\n      \"number\": \"1\",\n      \"question\": \"Discuss the recognition criteria for revenue.\",\n      \"answer\": \"Suggested solution...\",\n      \"answerNotes\": \"Candidates lost marks for omitting the control criteria.\",\n      \"marks\": 20\n    },\n    {\n      \"number\": \"2a\",\n      \"question\": \"Prepare the statement of profit or loss.\",\n      \"answer\": \"\",\n      \"answerNotes\": \"\",\n      \"marks\": null\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
             },
-            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/questions"
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/questions",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}", "questions"]
+            },
+            "description": "Replaces every question on the paper, then regenerates vectors and insights. order is assigned from the array index and is not a request field.\n\nquestions is required and must be a non-empty array.\nEach item:\n- question: required. Rows with a blank question are dropped.\n- number: optional. Defaults to the 1-based index.\n- answer: optional.\n- answerNotes: optional.\n- marks: optional number, or null."
           }
         },
         {
           "name": "Reprocess PDF",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/process"
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/process",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}", "process"]
+            },
+            "description": "Re-runs Gemini extraction for the stored PDF. No query params and no body. Returns 202 when extraction is already running for this paper."
           }
         },
         {
           "name": "Delete paper",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}"
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}"]
+            },
+            "description": "Deletes the paper, its questions, its insights, the S3 file, and stored vectors. No query params and no body."
           }
         }
       ]
     },
     {
       "name": "Student",
+      "description": "USER or ADMIN, plus an active course enrollment or an active AI subscription. Mounted at /v2/past-questions.",
       "item": [
         {
           "name": "Browse tree",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/v2/past-questions?categoryId={{categoryId}}"
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions?categoryId={{categoryId}}&year=&level=",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "past-questions"],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "description": "Optional. Category ObjectId. Invalid or empty values are ignored."
+                },
+                {
+                  "key": "year",
+                  "value": "",
+                  "description": "Optional. Numeric year, for example 2026. Empty is ignored."
+                },
+                {
+                  "key": "level",
+                  "value": "",
+                  "description": "Optional. Exact level string, for example 2. Empty is ignored."
+                }
+              ]
+            },
+            "description": "Returns only ACTIVE papers whose processStatus is SUCCESS."
           }
         },
         {
-          "name": "Get paper + questions",
+          "name": "Insight analytics",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}"
-          }
-        },
-        {
-          "name": "Paper + course insights",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}/insights"
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/insights/analytics?categoryId={{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "past-questions", "insights", "analytics"],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "description": "Optional. Category ObjectId. Empty includes every category. Student analytics count only this user's past-question AI usage."
+                }
+              ]
+            },
+            "description": "Same analytics shape as the admin route, limited to ACTIVE successful papers and the signed-in student's AI usage."
           }
         },
         {
           "name": "Course insights",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/v2/past-questions/insights?categoryId={{categoryId}}&level=2&paperCode=2.1"
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/insights?categoryId={{categoryId}}&level=2&paperCode=2.1&title=",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "past-questions", "insights"],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "description": "Required. Category ObjectId."
+                },
+                {
+                  "key": "level",
+                  "value": "2",
+                  "description": "Required. Exact level string."
+                },
+                {
+                  "key": "paperCode",
+                  "value": "2.1",
+                  "description": "Optional. When set, papers are matched by this code (uppercased) and title is ignored."
+                },
+                {
+                  "key": "title",
+                  "value": "",
+                  "description": "Optional. Used only when paperCode is empty. Exact paper title, for example FINANCIAL REPORTING."
+                }
+              ]
+            },
+            "description": "Course-level insight, matching papers, and topic frequency. Returns 400 when categoryId or level is missing."
+          }
+        },
+        {
+          "name": "Get paper and questions",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "past-questions", "{{pastQuestionPaperId}}"]
+            },
+            "description": "ACTIVE papers only. Questions are sorted by order. No query params."
+          }
+        },
+        {
+          "name": "Paper and course insights",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}/insights",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "past-questions", "{{pastQuestionPaperId}}", "insights"]
+            },
+            "description": "Saved insight for this sitting, the course insight, and topic frequency. No query params. Path id is the paper id."
           }
         },
         {
@@ -141,13 +393,21 @@
             "method": "POST",
             "header": [
               { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"question\": \"What are the common examiner comments on this paper?\",\n  \"scope\": \"paper\",\n  \"paperId\": \"{{pastQuestionPaperId}}\"\n}"
+              "raw": "{\n  \"question\": \"What are the common examiner comments on this paper?\",\n  \"scope\": \"paper\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"history\": [\n    {\n      \"role\": \"user\",\n      \"text\": \"Which topics showed up in this sitting?\"\n    },\n    {\n      \"role\": \"model\",\n      \"text\": \"Revenue recognition and leases.\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
             },
-            "url": "{{baseUrl}}/v2/past-questions/chat"
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "past-questions", "chat"]
+            },
+            "description": "scope paper requires paperId.\n\nBody:\n- question: required.\n- scope: paper | question | course. Defaults to paper.\n- paperId: required for paper scope.\n- history: optional. Up to the last 12 turns. Each turn uses role user, assistant, model, or ai, and text (content, question, or answer are also read). When history is omitted, the last 6 saved chats for this paper are used."
           }
         },
         {
@@ -156,28 +416,67 @@
             "method": "POST",
             "header": [
               { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"question\": \"How should I structure this answer?\",\n  \"scope\": \"question\",\n  \"questionId\": \"{{pastQuestionItemId}}\"\n}"
+              "raw": "{\n  \"question\": \"How should I structure this answer?\",\n  \"scope\": \"question\",\n  \"questionId\": \"{{pastQuestionItemId}}\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"history\": []\n}",
+              "options": { "raw": { "language": "json" } }
             },
-            "url": "{{baseUrl}}/v2/past-questions/chat"
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "past-questions", "chat"]
+            },
+            "description": "scope question requires questionId. paperId is optional here; the paper is loaded from the question. The desktop client sends both. history is optional and may be an empty array."
           }
         },
         {
-          "name": "Chat (course across years)",
+          "name": "Chat (course by paper)",
           "request": {
             "method": "POST",
             "header": [
               { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"question\": \"Which topics keep repeating in Financial Reporting?\",\n  \"scope\": \"course\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"level\": \"2\",\n  \"paperCode\": \"2.1\"\n}"
+              "raw": "{\n  \"question\": \"Which topics keep repeating in Financial Reporting?\",\n  \"scope\": \"course\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"level\": \"2\",\n  \"paperCode\": \"2.1\",\n  \"history\": [\n    {\n      \"role\": \"user\",\n      \"text\": \"Summarise the last July paper.\"\n    },\n    {\n      \"role\": \"model\",\n      \"text\": \"The July paper focused on leases and provisions.\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
             },
-            "url": "{{baseUrl}}/v2/past-questions/chat"
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "past-questions", "chat"]
+            },
+            "description": "Matches the desktop client. When paperId is present it selects that paper, and categoryId, level, and paperCode are not used to find it. title is not a chat field."
+          }
+        },
+        {
+          "name": "Chat (course by category and level)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Which topics keep repeating in Financial Reporting?\",\n  \"scope\": \"course\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"level\": \"2\",\n  \"paperCode\": \"2.1\",\n  \"history\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "past-questions", "chat"]
+            },
+            "description": "Course chat without paperId. categoryId and level are required on this path. paperCode is optional and is uppercased. The first matching successful paper is used. Omit paperCode only when you want the first paper for that category and level."
           }
         }
       ]

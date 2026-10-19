@@ -69,6 +69,7 @@
       "change-course-id": "ts-node src/scripts/changeCourseId.ts",
       "test:all-students-usage": "ts-node --transpile-only tests/allStudentsUsage.equivalence.ts",
       "ensure-ai-usage-index": "ts-node src/scripts/ensureAiUsageCreatedAtIndex.ts",
+      "ensure-subscription-invoice-index": "ts-node src/scripts/ensureSubscriptionInvoicePaymentReferenceIndex.ts",
       "type-start": "ts-node src/app.ts",
       "typeorm": "typeorm-ts-node-commonjs"
    }

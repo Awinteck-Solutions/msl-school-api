@@ -29,7 +29,9 @@ const subscriptionInvoiceSchema = new Schema(
       required: true,
     },
     paidAt: { type: Date, default: null },
-    paymentReference: { type: String, default: null },
+    // Leave unset until Paystack returns a reference. A stored null is indexed
+    // and collides on the unique index.
+    paymentReference: { type: String },
     authorizationUrl: { type: String, default: null },
     accessCode: { type: String, default: null },
     paystackData: { type: Schema.Types.Mixed, required: false },
@@ -41,7 +43,10 @@ const subscriptionInvoiceSchema = new Schema(
 subscriptionInvoiceSchema.index({ invoiceNumber: 1 }, { unique: true });
 subscriptionInvoiceSchema.index(
   { paymentReference: 1 },
-  { unique: true, sparse: true }
+  {
+    unique: true,
+    partialFilterExpression: { paymentReference: { $type: "string" } },
+  }
 );
 subscriptionInvoiceSchema.index({ userId: 1, createdAt: -1 });
 subscriptionInvoiceSchema.index({ subscription: 1, createdAt: -1 });
