@@ -6,7 +6,6 @@ dotenv.config();
 const connectToDatabase = async () => {
   try {
     await mongoose.connect(process.env.DB_URL, {
-      sanitizeFilter: true,
       autoCreate: true,
     });
     console.log("Connected to MongoDB successfully!✅");

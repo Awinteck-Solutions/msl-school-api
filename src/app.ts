@@ -8,6 +8,7 @@ import "reflect-metadata";
 import * as dotenv from 'dotenv';
 import { errorHandler } from "./middlewares/errorHandler.middleware";
 import { requestLogger } from "./middlewares/requestLogger.middleware";
+import { rejectOperatorKeys } from "./middlewares/rejectOperatorKeys.middleware";
 import * as cors from 'cors';
 import path = require("path");
 import connectToDatabase from "./database/data-source";
@@ -31,6 +32,7 @@ app.use(bodyParser.json({
     }
 }))
 app.use(bodyParser.urlencoded({extended: true}))
+app.use(rejectOperatorKeys)
 app.use(requestLogger)
 app.use(Router)
 
