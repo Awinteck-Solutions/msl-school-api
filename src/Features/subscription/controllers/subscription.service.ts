@@ -305,6 +305,7 @@ export const applySuccessfulInvoicePayment = async (
   subscription.currentPeriodEnd = periodEnd;
   subscription.gracePeriodEndsAt = null;
   subscription.lastInvoice = invoice._id;
+  subscription.isManual = false;
   if (!subscription.cancelAtPeriodEnd) {
     subscription.cancelledAt = null;
   }
@@ -401,6 +402,97 @@ export const startSubscriptionCheckout = async (params: {
   return { subscription, invoice, payment };
 };
 
+/**
+ * Gives a student the AI subscription without Paystack. `amount` 0 is a free grant; any other
+ * amount is recorded as a paid invoice (for example cash or a discounted price collected elsewhere).
+ * If the student already has live access, the new period is added after the current one.
+ */
+export const grantSubscription = async (params: {
+  userId: string;
+  email: string;
+  amount: number;
+  days?: number;
+  note?: string;
+  grantedBy?: string;
+}) => {
+  const plan = await getOrCreateSubscriptionPlan();
+  const days = params.days && params.days > 0 ? params.days : plan.intervalDays || 30;
+  const now = new Date();
+
+  let subscription = await findOpenSubscription(params.userId);
+  if (!subscription) {
+    subscription = Subscription({
+      userId: new mongoose.Types.ObjectId(params.userId),
+      email: params.email,
+      status: SubscriptionStatus.PENDING,
+    });
+  }
+
+  const hasLiveAccess =
+    subscription.status === SubscriptionStatus.ACTIVE &&
+    subscription.currentPeriodEnd &&
+    new Date(subscription.currentPeriodEnd) > now;
+  const periodStart = hasLiveAccess ? new Date(subscription.currentPeriodEnd) : now;
+  const periodEnd = addDays(periodStart, days);
+
+  if (!subscription._id) await subscription.save();
+
+  const invoice = SubscriptionInvoice({
+    subscription: subscription._id,
+    userId: subscription.userId,
+    email: subscription.email || params.email,
+    invoiceNumber: generateInvoiceNumber(),
+    amount: params.amount,
+    amountKobo: toKobo(params.amount),
+    currency: plan.currency || "GHS",
+    periodStart,
+    periodEnd,
+    dueDate: now,
+    status: SubscriptionInvoiceStatus.PAID,
+    paidAt: now,
+    paystackData: {
+      manual: true,
+      free: params.amount === 0,
+      grantedBy: params.grantedBy || null,
+      note: params.note || null,
+    },
+  });
+  await invoice.save();
+
+  // Anything still waiting for payment is replaced by this grant.
+  await SubscriptionInvoice.updateMany(
+    {
+      subscription: subscription._id,
+      _id: { $ne: invoice._id },
+      status: {
+        $in: [SubscriptionInvoiceStatus.OPEN, SubscriptionInvoiceStatus.OVERDUE],
+      },
+    },
+    { $set: { status: SubscriptionInvoiceStatus.VOID } }
+  );
+
+  if (!hasLiveAccess) {
+    subscription.currentPeriodStart = periodStart;
+    subscription.isManual = true;
+  }
+  subscription.currentPeriodEnd = periodEnd;
+  subscription.status = SubscriptionStatus.ACTIVE;
+  subscription.gracePeriodEndsAt = null;
+  subscription.cancelAtPeriodEnd = false;
+  subscription.cancelledAt = null;
+  subscription.lastInvoice = invoice._id;
+  await subscription.save();
+
+  await notifySubscriptionUser(String(subscription.userId), {
+    title: "AI subscription activated",
+    body: `Your MSL AI subscription is active until ${periodEnd.toDateString()}.`,
+    event: "subscription_granted",
+    invoiceId: String(invoice._id),
+  });
+
+  return { subscription, invoice };
+};
+
 export const markOverdueInvoices = async (now = new Date()) => {
   await SubscriptionInvoice.updateMany(
     {
@@ -419,6 +511,7 @@ export const createRenewalInvoicesAndRemind = async (now = new Date()) => {
   const dueSoon = await Subscription.find({
     status: SubscriptionStatus.ACTIVE,
     cancelAtPeriodEnd: { $ne: true },
+    isManual: { $ne: true },
     currentPeriodEnd: { $ne: null, $lte: reminderWindowStart, $gte: now },
   });
 
@@ -481,6 +574,19 @@ export const applyPeriodEndTransitions = async (now = new Date()) => {
   });
 
   for (const subscription of endedActive) {
+    if (subscription.isManual) {
+      // Admin-granted access is not billed, so it simply ends with no grace period.
+      subscription.status = SubscriptionStatus.EXPIRED;
+      subscription.gracePeriodEndsAt = null;
+      await subscription.save();
+      await notifySubscriptionUser(String(subscription.userId), {
+        title: "AI subscription ended",
+        body: "Your complimentary AI subscription has ended. Subscribe to keep your AI access.",
+        event: "subscription_expired",
+      });
+      continue;
+    }
+
     if (subscription.cancelAtPeriodEnd) {
       subscription.status = SubscriptionStatus.CANCELLED;
       subscription.gracePeriodEndsAt = null;

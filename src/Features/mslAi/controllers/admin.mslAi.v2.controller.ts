@@ -61,6 +61,13 @@ export class AdminMslAiV2Controller {
 
       const allPdfFiles = (data.Contents ?? [])
         .filter((obj) => obj.Key?.toLowerCase().endsWith(".pdf"))
+        .filter((obj) => {
+          const term =
+            typeof req.query.search === "string"
+              ? req.query.search.trim().toLowerCase()
+              : "";
+          return !term || (obj.Key || "").toLowerCase().includes(term);
+        })
         .map((obj) => ({
           key: obj.Key,
           size: obj.Size,
@@ -761,6 +768,88 @@ export class AdminMslAiV2Controller {
       return res.status(500).json({
         success: false,
         message: "Error deleting PDF from S3 and Qdrant",
+        error: error.message,
+      });
+    }
+  }
+
+  /** Remove only the indexed passages for these PDFs. The files stay in storage. */
+  static async deleteEmbeddings(req: Request, res: Response) {
+    try {
+      const raw = (req.body as { s3Keys?: unknown; key?: unknown }) || {};
+      const keys = (Array.isArray(raw.s3Keys) ? raw.s3Keys : raw.key ? [raw.key] : [])
+        .map((key) => String(key).trim().replace(/^\//, ""))
+        .filter(Boolean);
+      if (!keys.length) {
+        return res.status(400).json({ success: false, message: "Provide s3Keys (the PDF keys)" });
+      }
+
+      const exists = (await handleQdrantOperation(async () => {
+        const collections = await qdrant.getCollections();
+        return collections.collections.some((col: any) => col.name === COLLECTION_NAME);
+      }, "collection lookup")) as boolean;
+      if (!exists) {
+        return res.status(200).json({ success: true, message: "Nothing to remove", response: { deletedPoints: 0 } });
+      }
+
+      const filter = { must: [{ key: "pdfKey", match: { any: keys } }] } as any;
+      const counted = (await handleQdrantOperation(
+        async () => qdrant.count(COLLECTION_NAME, { exact: true, filter }),
+        "qdrant count"
+      )) as { count?: number };
+      const deletedPoints = Number(counted?.count || 0);
+      if (deletedPoints > 0) {
+        await handleQdrantOperation(
+          async () => qdrant.delete(COLLECTION_NAME, { wait: true, filter }),
+          "qdrant delete by filter"
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: deletedPoints ? `Removed ${deletedPoints} passage(s) from the index` : "No indexed passages found",
+        response: { deletedPoints },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error removing indexed passages",
+        error: error.message,
+      });
+    }
+  }
+
+  /** How many indexed passages exist for each PDF key. */
+  static async embeddingCounts(req: Request, res: Response) {
+    try {
+      const raw = (req.body as { s3Keys?: unknown })?.s3Keys;
+      const keys = (Array.isArray(raw) ? raw : [])
+        .map((key) => String(key).trim().replace(/^\//, ""))
+        .filter(Boolean)
+        .slice(0, 100);
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        keys.map(async (key) => {
+          try {
+            const result = (await handleQdrantOperation(
+              async () =>
+                qdrant.count(COLLECTION_NAME, {
+                  exact: true,
+                  filter: { must: [{ key: "pdfKey", match: { value: key } }] } as any,
+                }),
+              "qdrant count for key"
+            )) as { count?: number };
+            counts[key] = Number(result?.count || 0);
+          } catch {
+            counts[key] = 0;
+          }
+        })
+      );
+      return res.status(200).json({ success: true, response: counts });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error counting indexed passages",
         error: error.message,
       });
     }

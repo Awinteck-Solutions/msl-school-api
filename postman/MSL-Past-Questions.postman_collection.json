@@ -234,6 +234,23 @@
           }
         },
         {
+          "name": "Delete embeddings only",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "x-device-id", "value": "{{deviceId}}" },
+              { "key": "x-timezone", "value": "{{timezone}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/embeddings",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}", "embeddings"]
+            },
+            "description": "Removes Qdrant vectors for this paper without deleting the paper, questions, or PDF. Use when content should stop appearing in chat retrieval."
+          }
+        },
+        {
           "name": "Delete paper",
           "request": {
             "method": "DELETE",

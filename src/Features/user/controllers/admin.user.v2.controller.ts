@@ -386,6 +386,7 @@ export class AdminUserV2Controller {
           : 10000;
       const search = (req.query.search as string) || "";
       const status = (req.query.status as string) || "";
+      const role = ((req.query.role as string) || "").toUpperCase();
       const skip = (page - 1) * limit;
 
       const query: Record<string, unknown> = {};
@@ -411,10 +412,19 @@ export class AdminUserV2Controller {
         query.status = status;
       }
 
+      // "STUDENT" is a shortcut for app users; anything else must be a real role.
+      if (role === "STUDENT") {
+        query.role = Roles.USER;
+      } else if (role === "STAFF") {
+        query.role = {$ne: Roles.USER};
+      } else if (role && (Object.values(Roles) as string[]).includes(role)) {
+        query.role = role;
+      }
+
       const [users, total] = await Promise.all([
         User.find(
           query,
-          { _id: 1, email: 1, firstname: 1, lastname: 1, image: 1, status: 1, createdAt: 1 }
+          { _id: 1, email: 1, firstname: 1, lastname: 1, image: 1, status: 1, role: 1, createdAt: 1 }
         )
           .sort({ createdAt: -1 })
           .skip(skip)

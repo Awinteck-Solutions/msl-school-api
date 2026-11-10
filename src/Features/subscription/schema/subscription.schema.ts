@@ -21,6 +21,8 @@ const subscriptionSchema = new Schema(
     gracePeriodEndsAt: { type: Date, default: null },
     cancelAtPeriodEnd: { type: Boolean, default: false },
     cancelledAt: { type: Date, default: null },
+    // Granted by an admin (free or custom price). Not billed automatically when the period ends.
+    isManual: { type: Boolean, default: false },
     lastInvoice: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SubscriptionInvoice",

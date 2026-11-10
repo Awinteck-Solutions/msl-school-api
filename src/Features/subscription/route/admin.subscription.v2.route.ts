@@ -54,6 +54,15 @@ Router.get(
   }
 );
 
+Router.post(
+  "/grant",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionV2Controller.grantSubscription(req, res);
+  }
+);
+
 Router.get(
   "/invoices",
   authentification,

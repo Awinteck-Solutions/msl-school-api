@@ -418,13 +418,15 @@ export class AdminEnrolmentV2Controller {
 
   static async byUser(req: Request, res: Response) {
     const {email} = req.params;
+    // Admins can ask for every enrolment, including inactive ones, with ?all=true.
+    const includeInactive = String(req.query.all || "").toLowerCase() === "true";
     if (!email) {
       return res.status(400).json({
         error: "Missing fields",
       });
     }
 
-    Enrolled.find({email, status: "ACTIVE"})
+    Enrolled.find(includeInactive ? {email} : {email, status: "ACTIVE"})
       .populate({
         path: "course",
         populate: {path: "categoryId"},
@@ -435,14 +437,19 @@ export class AdminEnrolmentV2Controller {
           message: "Enrolled all User",
           result: result
             .filter((value) => {
-              if (value.course === undefined) return false;
+              if (value.course === undefined || value.course === null) return false;
+              if (includeInactive) return true;
               if (value.course?.status === "ACTIVE") return true;
               return false;
             })
-            .map((value) => value.course),
+            .map((value) =>
+              includeInactive
+                ? {...value.course.toObject(), enrolmentStatus: value.status}
+                : value.course
+            ),
         });
       })
-      .catch((error) => {
+      .catch(() => {
         return res.status(404).json({
           status: false,
           message: "Enrolled users failed",
@@ -454,8 +461,6 @@ export class AdminEnrolmentV2Controller {
     try {
       const {email, courseIds} = req.body;
 
-      console.log("courseIds", courseIds);
-
       if (!email || !courseIds || !Array.isArray(courseIds)) {
         return res.status(400).json({
           status: false,
@@ -463,48 +468,68 @@ export class AdminEnrolmentV2Controller {
         });
       }
 
-      const enrollments = courseIds.map((courseId: string) => ({
+      const wanted = Array.from(new Set(courseIds.map((id: any) => String(id))));
+
+      // Skip courses the student is already enrolled in, and re-activate old rows.
+      const existing = await Enrolled.find({
         email,
-        course: courseId,
-      }));
-
-      const result = await Enrolled.insertMany(enrollments);
-
-      const student = await User.findOne({email: email})
-        .select("firebase_token notificationSettings")
-        .lean();
-      const firebaseToken = (student as any)?.firebase_token as
-        | string
-        | undefined;
-
-      for (const courseId of courseIds) {
-        const course = (await Course.findById(courseId)
-          .select("title")
-          .lean()) as any;
-        if (!course) continue;
-        if (!firebaseToken) {
-          return res.status(404).json({
-            status: false,
-            message: "Student not found",
-          });
-        }
-        if (isUserNotificationEnabled(student as any, "course_alerts")) {
-          sendFirebaseNotification(firebaseToken, {
-            title: "You have been enrolled to a course",
-            body: `You have been enrolled to a course ${course.title}`,
-            data: {
-              type: "enrolment",
-              event: "enrolment_added",
-              course: courseId.toString(),
-              courseTitle: course.title,
-            },
-          });
-        }
+        course: {$in: wanted},
+      }).lean();
+      const existingIds = new Set(existing.map((row: any) => String(row.course)));
+      const reactivate = existing.filter((row: any) => row.status !== "ACTIVE");
+      if (reactivate.length) {
+        await Enrolled.updateMany(
+          {_id: {$in: reactivate.map((row: any) => row._id)}},
+          {$set: {status: "ACTIVE"}}
+        );
       }
+
+      const fresh = wanted.filter((id) => !existingIds.has(id));
+      const result = fresh.length
+        ? await Enrolled.insertMany(fresh.map((course) => ({email, course})))
+        : [];
+
+      // The enrolment is already saved. Notifying the student is best effort and must
+      // never turn a successful enrolment into an error response.
+      let notified = false;
+      try {
+        const student = await User.findOne({email: email})
+          .select("firebase_token notificationSettings")
+          .lean();
+        const firebaseToken = (student as any)?.firebase_token as
+          | string
+          | undefined;
+        if (firebaseToken && isUserNotificationEnabled(student as any, "course_alerts")) {
+          for (const courseId of fresh) {
+            const course = (await Course.findById(courseId)
+              .select("title")
+              .lean()) as any;
+            if (!course) continue;
+            sendFirebaseNotification(firebaseToken, {
+              title: "You have been enrolled to a course",
+              body: `You have been enrolled to a course ${course.title}`,
+              data: {
+                type: "enrolment",
+                event: "enrolment_added",
+                course: String(courseId),
+                courseTitle: course.title,
+              },
+            });
+            notified = true;
+          }
+        }
+      } catch (notifyError) {
+        console.log("enrolment notification failed", notifyError);
+      }
+
       return res.status(201).json({
         status: true,
         message: "User successfully enrolled in multiple courses",
         response: result,
+        enrolled: fresh.length,
+        alreadyEnrolled: wanted.length - fresh.length,
+        reactivated: reactivate.length,
+        notified,
       });
     } catch (error: any) {
       return res.status(500).json({

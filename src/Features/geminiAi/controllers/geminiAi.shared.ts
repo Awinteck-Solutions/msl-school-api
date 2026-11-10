@@ -719,6 +719,7 @@ export const buildCollectionVectorConfig = (): any => ({
 /** Payload keys used in filters; must have keyword indexes in Qdrant. */
 const PAYLOAD_INDEX_KEYS = [
   "sourceType",
+  "sourceUrl",
   "courseId",
   "courseIds",
   "lessonId",
@@ -849,6 +850,9 @@ export const buildContentFilter = (options: {
   courseId?: string;
   lessonId?: string;
   resourceId?: string;
+  sourceUrl?: string;
+  /** When true, s3Keys alone is enough to match (used by admin deletes). */
+  matchS3KeysAlone?: boolean;
 }): Record<string, unknown> | undefined => {
   const must: Record<string, unknown>[] = [];
   const courseId = options.courseId ? String(options.courseId).trim() : undefined;
@@ -856,12 +860,17 @@ export const buildContentFilter = (options: {
   const resourceId = options.resourceId
     ? String(options.resourceId).trim()
     : undefined;
+  const sourceUrl = options.sourceUrl ? String(options.sourceUrl).trim() : undefined;
   const s3Keys = options.s3Keys?.length
     ? options.s3Keys.map((k) => normalizeStorageKey(k)).filter(Boolean)
     : undefined;
 
-  // Only narrow by file when a lesson (or file-only scope) is explicitly targeted.
-  const useS3Keys = Boolean(s3Keys?.length && (lessonId || resourceId || !courseId));
+  // Only narrow by file when a lesson (or file-only scope) is explicitly targeted,
+  // unless the caller asked to match s3Keys alone (admin delete by file key).
+  const useS3Keys = Boolean(
+    s3Keys?.length &&
+      (options.matchS3KeysAlone || lessonId || resourceId || !courseId)
+  );
 
   if (useS3Keys && s3Keys) {
     must.push({
@@ -885,8 +894,83 @@ export const buildContentFilter = (options: {
   if (resourceId) {
     must.push({ key: "resourceId", match: { value: resourceId } });
   }
+  if (sourceUrl) {
+    must.push({ key: "sourceUrl", match: { value: sourceUrl } });
+  }
   if (must.length === 0) return undefined;
   return { must };
+};
+
+/** Delete Qdrant points matching a content filter. Returns how many points matched. */
+export const deleteQdrantPointsByFilter = async (options: {
+  collectionName?: string;
+  s3Keys?: string[];
+  courseId?: string;
+  lessonId?: string;
+  resourceId?: string;
+  sourceUrl?: string;
+  matchS3KeysAlone?: boolean;
+}): Promise<{ success: boolean; deletedPoints: number; error?: string }> => {
+  const collectionName = options.collectionName || COLLECTION_NAME;
+  const filter = buildContentFilter({
+    s3Keys: options.s3Keys,
+    courseId: options.courseId,
+    lessonId: options.lessonId,
+    resourceId: options.resourceId,
+    sourceUrl: options.sourceUrl,
+    matchS3KeysAlone: options.matchS3KeysAlone,
+  });
+  if (!filter) {
+    return { success: true, deletedPoints: 0 };
+  }
+
+  try {
+    const collections = (await handleQdrantOperation(
+      async () => qdrant.getCollections(),
+      "collection lookup for delete"
+    )) as { collections?: { name: string }[] };
+
+    const exists = Boolean(
+      collections?.collections?.some((col) => col.name === collectionName)
+    );
+    if (!exists) {
+      return { success: true, deletedPoints: 0 };
+    }
+
+    await ensurePayloadIndexesForGeminiCollection(collectionName);
+
+    const countRes = (await handleQdrantOperation(
+      async () =>
+        qdrant.count(collectionName, {
+          exact: true,
+          filter: filter as any,
+        }),
+      "qdrant count for delete"
+    )) as { count?: number };
+
+    const deletedPoints = Number(countRes?.count || 0);
+    if (deletedPoints > 0) {
+      await handleQdrantOperation(
+        async () =>
+          qdrant.delete(collectionName, {
+            wait: true,
+            filter: filter as any,
+          }),
+        "qdrant delete by filter"
+      );
+    }
+
+    return { success: true, deletedPoints };
+  } catch (error: any) {
+    return {
+      success: false,
+      deletedPoints: 0,
+      error:
+        error?.data?.status?.error ||
+        error?.message ||
+        String(error),
+    };
+  }
 };
 
 // const MAX_CONTEXT_TOKENS = 30000;

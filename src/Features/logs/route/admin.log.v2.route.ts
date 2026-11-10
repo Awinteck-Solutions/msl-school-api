@@ -19,4 +19,23 @@ Router.get(
   }
 );
 
+// Deleting is destructive, so these stay admin-only even though the list is open to any signed-in user.
+Router.post(
+  "/delete",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminLogV2Controller.removeMany(req, res);
+  }
+);
+
+Router.post(
+  "/delete-matching",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminLogV2Controller.removeMatching(req, res);
+  }
+);
+
 export default Router;

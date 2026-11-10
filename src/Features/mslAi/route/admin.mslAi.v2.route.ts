@@ -77,11 +77,38 @@ Router.post(
 );
 
 Router.delete(
+  "/delete-pdf",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminMslAiV2Controller.deletePdfOld(req, res);
+  }
+);
+
+Router.delete(
   "/delete-pdf/old",
   authentification,
   authorization([Roles.ADMIN]),
   (req: Request, res: Response) => {
     AdminMslAiV2Controller.deletePdfOld(req, res);
+  }
+);
+
+Router.delete(
+  "/embeddings",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminMslAiV2Controller.deleteEmbeddings(req, res);
+  }
+);
+
+Router.post(
+  "/embeddings/counts",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminMslAiV2Controller.embeddingCounts(req, res);
   }
 );
 

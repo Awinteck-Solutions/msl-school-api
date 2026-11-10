@@ -35,6 +35,7 @@ import {
 } from "../../geminiAi/controllers/geminiAi.shared";
 import {
   getOrCreateSubscriptionPlan,
+  grantSubscription,
   publicPlanPayload,
   serializeSubscription,
 } from "./subscription.service";
@@ -376,6 +377,61 @@ export class AdminSubscriptionV2Controller {
       return res.status(500).json({
         status: false,
         message: "Failed to fetch subscriptions",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  static async grantSubscription(req: Request, res: Response) {
+    try {
+      const email = String(req.body?.email || "").trim();
+      const amount = Number(req.body?.amount ?? 0);
+      const rawDays = req.body?.days;
+      const days = rawDays === undefined || rawDays === null || rawDays === "" ? undefined : Number(rawDays);
+      const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 300) : "";
+
+      if (!email) {
+        return res.status(400).json({ status: false, message: "Student email is required" });
+      }
+      if (!Number.isFinite(amount) || amount < 0) {
+        return res.status(400).json({ status: false, message: "Amount must be 0 (free) or a positive number" });
+      }
+      if (days !== undefined && (!Number.isInteger(days) || days < 1 || days > 3650)) {
+        return res.status(400).json({ status: false, message: "Days must be a whole number between 1 and 3650" });
+      }
+
+      const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const user: any = await User.findOne({
+        email: { $regex: `^${escaped}$`, $options: "i" },
+      })
+        .select("_id email firstname lastname")
+        .lean();
+      if (!user) {
+        return res.status(404).json({ status: false, message: "Student not found" });
+      }
+
+      const admin: any = req["currentUser"] || {};
+      const { subscription, invoice } = await grantSubscription({
+        userId: String(user._id),
+        email: user.email,
+        amount,
+        days,
+        note,
+        grantedBy: admin.email || admin.id || undefined,
+      });
+
+      return res.status(201).json({
+        status: true,
+        message: amount === 0 ? "Free subscription granted" : "Subscription granted",
+        response: {
+          subscription: serializeSubscription(subscription),
+          invoice,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to grant subscription",
         error: error?.message || error,
       });
     }

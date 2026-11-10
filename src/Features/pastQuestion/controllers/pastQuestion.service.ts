@@ -1,3 +1,4 @@
+import axios from "axios";
 import mongoose from "mongoose";
 import { readFileSync } from "fs";
 import * as path from "path";
@@ -29,6 +30,13 @@ import {
 import PastQuestionInsight from "../schema/pastQuestionInsight.schema";
 import PastQuestionItem from "../schema/pastQuestionItem.schema";
 import PastQuestionPaper from "../schema/pastQuestionPaper.schema";
+import {
+  extractFormattedQuestionsFromPdf,
+  htmlToPlainText,
+  normaliseNumber,
+  sanitizeQuestionHtml,
+  textOverlap,
+} from "./pastQuestionFormat";
 
 export const PAST_QUESTION_COLLECTION_NAME =
   process.env.GEMINI_PAST_QUESTION_COLLECTION || "gemini_ai_past_questions";
@@ -771,7 +779,29 @@ export const processPastQuestionPaper = async (paperId: string) => {
     const buffer = await downloadFileFromS3(paper.fileKey);
     const extractedText = await extractPdfContent(buffer);
     paper.extractedText = extractedText;
-    const extracted = await extractQuestionsFromText(extractedText);
+
+    // Prefer reading the PDF itself so tables and lists survive; fall back to plain text.
+    let extracted: Array<Record<string, any>> = [];
+    try {
+      const formatted = await extractFormattedQuestionsFromPdf(buffer);
+      extracted = formatted.map((row, index) => ({
+        number: row.number,
+        question: htmlToPlainText(row.questionHtml),
+        answer: htmlToPlainText(row.answerHtml),
+        answerNotes: htmlToPlainText(row.answerNotesHtml),
+        questionHtml: row.questionHtml,
+        answerHtml: row.answerHtml,
+        answerNotesHtml: row.answerNotesHtml,
+        formatVersion: 1,
+        marks: row.marks,
+        order: index,
+      }));
+    } catch (error: any) {
+      console.warn("[past-questions] formatted extraction failed, using plain text", error?.message || error);
+    }
+    if (!extracted.length) {
+      extracted = await extractQuestionsFromText(extractedText);
+    }
 
     await PastQuestionItem.deleteMany({ paper: paper._id });
     const created =
@@ -812,6 +842,9 @@ export const replacePaperQuestions = async (
     question: string;
     answer?: string;
     answerNotes?: string;
+    questionHtml?: string;
+    answerHtml?: string;
+    answerNotesHtml?: string;
     marks?: number | null;
   }>
 ) => {
@@ -820,19 +853,29 @@ export const replacePaperQuestions = async (
   await PastQuestionItem.deleteMany({ paper: paper._id });
   const created = await PastQuestionItem.insertMany(
     questions
-      .filter((item) => item.question && item.question.trim())
-      .map((item, order) => ({
+      .filter((item) => (item.question && item.question.trim()) || (item.questionHtml && item.questionHtml.trim()))
+      .map((item, order) => {
+        // When formatted HTML is supplied it is the source of truth; the plain text follows it.
+        const questionHtml = sanitizeQuestionHtml(item.questionHtml);
+        const answerHtml = sanitizeQuestionHtml(item.answerHtml);
+        const answerNotesHtml = sanitizeQuestionHtml(item.answerNotesHtml);
+        return {
         paper: paper._id,
         number: String(item.number || order + 1),
-        question: item.question.trim(),
-        answer: String(item.answer || "").trim(),
-        answerNotes: String(item.answerNotes || "").trim(),
+        question: questionHtml ? htmlToPlainText(questionHtml) : String(item.question || "").trim(),
+        answer: answerHtml ? htmlToPlainText(answerHtml) : String(item.answer || "").trim(),
+        answerNotes: answerNotesHtml ? htmlToPlainText(answerNotesHtml) : String(item.answerNotes || "").trim(),
+        questionHtml,
+        answerHtml,
+        answerNotesHtml,
+        formatVersion: questionHtml ? 1 : 0,
         marks:
           item.marks === null || item.marks === undefined
             ? null
             : Number(item.marks),
         order,
-      }))
+        };
+      })
   );
   paper.questionCount = created.length;
   paper.processStatus = PastQuestionProcessStatus.SUCCESS;
@@ -843,6 +886,241 @@ export const replacePaperQuestions = async (
   await refreshPaperInsights(String(paper._id)).catch(() => {});
   await refreshCourseInsights(paper).catch(() => {});
   return { paper, items: created };
+};
+
+/* ------------------------------------------------------------------ */
+/* Re-read existing papers so tables, lists and emphasis are kept       */
+/* ------------------------------------------------------------------ */
+
+const loadPaperPdf = async (paper: any): Promise<Buffer> => {
+  try {
+    return await downloadFileFromS3(paper.fileKey);
+  } catch (error) {
+    const url = paper.fileUrl || publicFileUrl(paper.fileKey);
+    if (!url) throw error;
+    const response = await axios.get(url, { responseType: "arraybuffer", timeout: 120000 });
+    return Buffer.from(response.data);
+  }
+};
+
+export type ReformatResult = {
+  paperId: string;
+  total: number;
+  updated: number;
+  /** Question numbers the PDF read did not return. */
+  missing: string[];
+  /** Question numbers whose PDF text did not match the stored question; left unchanged. */
+  mismatched: string[];
+  /** Numbers whose solution or notes could not be matched; question HTML was still saved. */
+  partial: string[];
+  syncedPlain: boolean;
+};
+
+const reformatting = new Set<string>();
+
+/**
+ * Re-reads the paper's PDF and stores HTML copies of each existing question, solution and
+ * examiner note. Questions keep their ids and order, so insights, topics and references stay valid.
+ * With `syncPlain`, the plain-text fields are also rewritten from the PDF (bullets and table rows
+ * become readable lines) and the paper's search vectors are rebuilt.
+ */
+export const reformatPaperFromPdf = async (
+  paperId: string,
+  options: { syncPlain?: boolean } = {}
+): Promise<ReformatResult> => {
+  if (reformatting.has(paperId)) throw new Error("This paper is already being re-read");
+  reformatting.add(paperId);
+  try {
+    const paper: any = await PastQuestionPaper.findById(paperId);
+    if (!paper) throw new Error("Paper not found");
+    const items: any[] = await PastQuestionItem.find({ paper: paper._id }).sort({ order: 1 }).lean();
+    if (!items.length) throw new Error("This paper has no questions yet. Process it first.");
+
+    const pdf = await loadPaperPdf(paper);
+    const rows = await extractFormattedQuestionsFromPdf(
+      pdf,
+      items.map((item) => ({ number: String(item.number || ""), question: String(item.question || "") }))
+    );
+
+    const queues = new Map<string, typeof rows>();
+    rows.forEach((row) => {
+      const key = normaliseNumber(row.number);
+      queues.set(key, [...(queues.get(key) || []), row]);
+    });
+
+    const result: ReformatResult = {
+      paperId,
+      total: items.length,
+      updated: 0,
+      missing: [],
+      mismatched: [],
+      partial: [],
+      syncedPlain: Boolean(options.syncPlain),
+    };
+    const operations: any[] = [];
+    const usedRows = new Set<(typeof rows)[number]>();
+
+    for (const item of items) {
+      const label = String(item.number || "");
+      const key = normaliseNumber(label);
+      let row = queues.get(key)?.shift();
+      if (!row && key) {
+        // The PDF read may split a whole question ("1") into its parts ("1(a)", "1(b)").
+        // Join those parts back together in order.
+        const parts = rows.filter((candidate) => {
+          const other = normaliseNumber(candidate.number);
+          return other.startsWith(key) && /^[a-z]/.test(other.slice(key.length)) && !usedRows.has(candidate);
+        });
+        if (parts.length) {
+          parts.forEach((part) => usedRows.add(part));
+          const join = (field: "questionHtml" | "answerHtml" | "answerNotesHtml") =>
+            parts.map((part) => part[field]).filter(Boolean).join("\n");
+          const marks = parts.map((part) => part.marks).filter((m): m is number => typeof m === "number");
+          row = {
+            number: label,
+            questionHtml: join("questionHtml"),
+            answerHtml: join("answerHtml"),
+            answerNotesHtml: join("answerNotesHtml"),
+            marks: marks.length ? marks.reduce((a, b) => a + b, 0) : null,
+          };
+        }
+      }
+      if (!row) {
+        result.missing.push(label);
+        continue;
+      }
+      const questionText = htmlToPlainText(row.questionHtml);
+      if (textOverlap(String(item.question || ""), questionText) < 0.5) {
+        result.mismatched.push(label);
+        continue;
+      }
+      // A solution or note only counts when it lines up with what is already stored.
+      const fits = (stored: unknown, html: string) =>
+        !html || !String(stored || "").trim() || textOverlap(String(stored), htmlToPlainText(html)) >= 0.4;
+      const answerOk = fits(item.answer, row.answerHtml);
+      const notesOk = fits(item.answerNotes, row.answerNotesHtml);
+      if (!answerOk || !notesOk) result.partial.push(label);
+
+      const set: Record<string, unknown> = {
+        questionHtml: row.questionHtml,
+        answerHtml: answerOk ? row.answerHtml : "",
+        answerNotesHtml: notesOk ? row.answerNotesHtml : "",
+        formatVersion: 1,
+      };
+      if (options.syncPlain) {
+        set.question = questionText;
+        if (answerOk && row.answerHtml) set.answer = htmlToPlainText(row.answerHtml);
+        if (notesOk && row.answerNotesHtml) set.answerNotes = htmlToPlainText(row.answerNotesHtml);
+      }
+      operations.push({ updateOne: { filter: { _id: item._id }, update: { $set: set } } });
+      result.updated += 1;
+    }
+
+    if (operations.length) await PastQuestionItem.bulkWrite(operations);
+
+    if (options.syncPlain && result.updated) {
+      const fresh = await PastQuestionItem.find({ paper: paper._id }).sort({ order: 1 }).lean();
+      await deletePastQuestionVectors(paperId).catch(() => {});
+      await upsertPaperVectors(paper, fresh);
+    }
+    return result;
+  } finally {
+    reformatting.delete(paperId);
+  }
+};
+
+export type ReformatJobState = {
+  isRunning: boolean;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  total: number;
+  done: number;
+  updatedQuestions: number;
+  needsReview: number;
+  failed: number;
+  current: string | null;
+  errors: Array<{ paperId: string; title: string; error: string }>;
+};
+
+const reformatJob: ReformatJobState = {
+  isRunning: false,
+  startedAt: null,
+  finishedAt: null,
+  total: 0,
+  done: 0,
+  updatedQuestions: 0,
+  needsReview: 0,
+  failed: 0,
+  current: null,
+  errors: [],
+};
+
+export const getReformatJobState = (): ReformatJobState => ({ ...reformatJob, errors: reformatJob.errors.slice(-20) });
+
+/** Papers that still have questions without HTML. */
+export const findPapersNeedingFormat = async (): Promise<string[]> => {
+  const ids = await PastQuestionItem.distinct("paper", { formatVersion: { $ne: 1 } });
+  const papers = await PastQuestionPaper.find({ _id: { $in: ids }, fileKey: { $ne: "" } })
+    .select("_id")
+    .lean();
+  return papers.map((paper: any) => String(paper._id));
+};
+
+/** Starts a background run over many papers. Returns false when one is already running. */
+export const startReformatJob = async (options: {
+  paperIds?: string[];
+  onlyUnformatted?: boolean;
+  syncPlain?: boolean;
+  concurrency?: number;
+}): Promise<{ started: boolean; total: number }> => {
+  if (reformatJob.isRunning) return { started: false, total: reformatJob.total };
+
+  const ids = options.paperIds?.length
+    ? options.paperIds
+    : options.onlyUnformatted === false
+    ? (await PastQuestionPaper.find({}).select("_id").lean()).map((paper: any) => String(paper._id))
+    : await findPapersNeedingFormat();
+
+  Object.assign(reformatJob, {
+    isRunning: true,
+    startedAt: new Date(),
+    finishedAt: null,
+    total: ids.length,
+    done: 0,
+    updatedQuestions: 0,
+    needsReview: 0,
+    failed: 0,
+    current: null,
+    errors: [],
+  });
+
+  const queue = [...ids];
+  const workers = Math.max(1, Math.min(5, options.concurrency || 3));
+  void Promise.all(
+    Array.from({ length: workers }, async () => {
+      while (queue.length) {
+        const id = queue.shift() as string;
+        const title = (await PastQuestionPaper.findById(id).select("title year sitting level").lean()) as any;
+        reformatJob.current = title ? `${title.title} · ${title.year} ${title.sitting || ""}`.trim() : id;
+        try {
+          const result = await reformatPaperFromPdf(id, { syncPlain: options.syncPlain });
+          reformatJob.updatedQuestions += result.updated;
+          if (result.missing.length || result.mismatched.length || result.partial.length) reformatJob.needsReview += 1;
+        } catch (error: any) {
+          reformatJob.failed += 1;
+          reformatJob.errors.push({ paperId: id, title: title?.title || id, error: error?.message || String(error) });
+        } finally {
+          reformatJob.done += 1;
+        }
+      }
+    })
+  ).finally(() => {
+    reformatJob.isRunning = false;
+    reformatJob.finishedAt = new Date();
+    reformatJob.current = null;
+  });
+
+  return { started: true, total: ids.length };
 };
 
 const normalizeLabel = (value: unknown) => leafTopicLabel(value);

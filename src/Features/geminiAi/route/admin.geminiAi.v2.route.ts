@@ -57,6 +57,33 @@ Router.post(
   }
 );
 
+Router.delete(
+  "/process-from-url",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.deleteFromUrl(req, res);
+  }
+);
+
+Router.post(
+  "/embeddings/counts",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.embeddingCounts(req, res);
+  }
+);
+
+Router.delete(
+  "/embeddings",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.deleteEmbeddings(req, res);
+  }
+);
+
 // USE THIS
 Router.post(
   "/process-course-lessons-for-embedding",
@@ -181,14 +208,14 @@ Router.get(
   }
 );
 
-// Router.delete(
-//   "/collection",
-//   authentification,
-//   authorization([Roles.ADMIN]),
-//   (req: Request, res: Response) => {
-//     AdminGeminiAiV2Controller.deleteCollection(req, res);
-//   }
-// );
+Router.delete(
+  "/collection",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminGeminiAiV2Controller.deleteCollection(req, res);
+  }
+);
 
 Router.get(
   "/test-qdrant",

@@ -37,6 +37,14 @@ Router.get("/insights/analytics", (req: Request, res: Response) => {
   AdminPastQuestionV2Controller.insightAnalytics(req, res);
 });
 
+Router.get("/reformat-status", (req: Request, res: Response) => {
+  AdminPastQuestionV2Controller.reformatStatus(req, res);
+});
+
+Router.post("/reformat-all", (req: Request, res: Response) => {
+  AdminPastQuestionV2Controller.reformatAll(req, res);
+});
+
 Router.get("/", (req: Request, res: Response) => {
   AdminPastQuestionV2Controller.list(req, res);
 });
@@ -53,8 +61,16 @@ Router.put("/:id/questions", (req: Request, res: Response) => {
   AdminPastQuestionV2Controller.updateQuestions(req, res);
 });
 
+Router.post("/:id/reformat", (req: Request, res: Response) => {
+  AdminPastQuestionV2Controller.reformat(req, res);
+});
+
 Router.post("/:id/process", (req: Request, res: Response) => {
   AdminPastQuestionV2Controller.process(req, res);
+});
+
+Router.delete("/:id/embeddings", (req: Request, res: Response) => {
+  AdminPastQuestionV2Controller.deleteEmbeddings(req, res);
 });
 
 Router.delete("/:id", (req: Request, res: Response) => {

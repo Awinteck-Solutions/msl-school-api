@@ -17,7 +17,11 @@ import {
   buildBrowseTree,
   buildPastQuestionAnalytics,
   deletePastQuestionVectors,
+  findPapersNeedingFormat,
+  getReformatJobState,
   processPastQuestionPaper,
+  reformatPaperFromPdf,
+  startReformatJob,
   publicFileUrl,
   replacePaperQuestions,
   serializePaper,
@@ -288,6 +292,102 @@ export class AdminPastQuestionV2Controller {
       return res.status(500).json({
         status: false,
         message: "Failed to process past question",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  /** Re-read one paper's PDF and keep its tables, lists and formatting as HTML. */
+  static async reformat(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id || "");
+      if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ status: false, message: "Invalid id" });
+      }
+      const result = await reformatPaperFromPdf(id, { syncPlain: Boolean(req.body?.syncPlain) });
+      const items = await PastQuestionItem.find({ paper: id }).sort({ order: 1 }).lean();
+      return res.status(200).json({
+        status: true,
+        message: `Formatting kept for ${result.updated} of ${result.total} questions`,
+        response: { ...result, questions: items },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: error?.message || "Failed to re-read the PDF",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  /** Background run over every paper that still has plain-text questions. */
+  static async reformatAll(req: Request, res: Response) {
+    try {
+      const body = (req.body || {}) as { onlyUnformatted?: boolean; syncPlain?: boolean; concurrency?: number };
+      const { started, total } = await startReformatJob({
+        onlyUnformatted: body.onlyUnformatted !== false,
+        syncPlain: Boolean(body.syncPlain),
+        concurrency: Number(body.concurrency) || 3,
+      });
+      return res.status(started ? 202 : 409).json({
+        status: started,
+        message: started
+          ? `Re-reading ${total} paper${total === 1 ? "" : "s"} in the background`
+          : "A run is already in progress",
+        response: getReformatJobState(),
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to start the run",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  static async reformatStatus(_req: Request, res: Response) {
+    try {
+      const [pending, formatted] = await Promise.all([
+        findPapersNeedingFormat(),
+        PastQuestionItem.countDocuments({ formatVersion: 1 }),
+      ]);
+      return res.status(200).json({
+        status: true,
+        message: "Status fetched",
+        response: { ...getReformatJobState(), papersPending: pending.length, questionsFormatted: formatted },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to read status",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  /** Remove Qdrant vectors for a paper without deleting the paper itself. */
+  static async deleteEmbeddings(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id || "");
+      if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ status: false, message: "Invalid id" });
+      }
+      const paper = await PastQuestionPaper.findById(id).lean();
+      if (!paper) {
+        return res.status(404).json({ status: false, message: "Paper not found" });
+      }
+
+      await deletePastQuestionVectors(id);
+
+      return res.status(200).json({
+        status: true,
+        message: "Past question embeddings deleted from Qdrant",
+        response: { paperId: id },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to delete past question embeddings",
         error: error?.message || error,
       });
     }

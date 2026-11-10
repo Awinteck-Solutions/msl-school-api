@@ -23,6 +23,7 @@ import {
   downloadFileFromUrl,
   embedText,
   ensurePayloadIndexesForGeminiCollection,
+  deleteQdrantPointsByFilter,
   getFileNameFromUrl,
   getMimeTypeForS3Key,
   getMimeTypeForUrl,
@@ -31,6 +32,7 @@ import {
   geminiChatModel,
   inferSourceTypeFromUrl,
   LESSON_FILES_BASE_URL,
+  normalizeStorageKey,
   parsePdfText,
   resolveVectorFormat,
   transcribeVideoWithGemini,
@@ -81,6 +83,13 @@ const backfillCourseIdsJobState = {
   lastError: null as string | null,
 };
 
+/** Case-insensitive match on a storage key's file name; an empty search matches everything. */
+const matchesFileSearch = (key: string | undefined, search: unknown) => {
+  const term = typeof search === "string" ? search.trim().toLowerCase() : "";
+  if (!term) return true;
+  return (key || "").toLowerCase().includes(term);
+};
+
 const escapeLiteralRegex = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -114,6 +123,7 @@ export class AdminGeminiAiV2Controller {
 
       const allPdfFiles = (data.Contents ?? [])
         .filter((obj) => obj.Key?.toLowerCase().endsWith(".pdf"))
+        .filter((obj) => matchesFileSearch(obj.Key, req.query.search))
         .map((obj) => ({
           key: obj.Key,
           size: obj.Size,
@@ -180,6 +190,7 @@ export class AdminGeminiAiV2Controller {
           const key = (obj.Key || "").toLowerCase();
           return videoExtensions.some((ext) => key.endsWith(ext));
         })
+        .filter((obj) => matchesFileSearch(obj.Key, req.query.search))
         .map((obj) => ({
           key: obj.Key,
           size: obj.Size,
@@ -877,6 +888,25 @@ export class AdminGeminiAiV2Controller {
       }
       if (status && ["SUCCESS", "FAILED", "PROCESSING"].includes(status)) {
         filter.status = status;
+      }
+      const fileType = (req.query.fileType as string)?.trim();
+      if (fileType && ["pdf", "video"].includes(fileType)) {
+        filter.fileType = fileType;
+      }
+
+      const search = ((req.query.search as string) || "").trim().slice(0, 100);
+      if (search) {
+        const pattern = new RegExp(escapeLiteralRegex(search), "i");
+        const [lessonMatches, courseMatches] = await Promise.all([
+          Lesson.find({ title: pattern }).select("_id").limit(2000).lean(),
+          Course.find({ title: pattern }).select("_id").limit(500).lean(),
+        ]);
+        filter.$or = [
+          { fileName: pattern },
+          { fileKey: pattern },
+          { lesson: { $in: lessonMatches.map((item: any) => item._id) } },
+          { course: { $in: courseMatches.map((item: any) => item._id) } },
+        ];
       }
 
       const total = await ProcessedLessonFile.countDocuments(filter);
@@ -1618,6 +1648,207 @@ export class AdminGeminiAiV2Controller {
       return res.status(500).json({
         success: false,
         message: "Error retrieving collection info",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Delete Qdrant points created by process-from-url / course-lesson embedding.
+   * Body (at least one required): sourceUrl | url, s3Key | s3Keys, lessonId, courseId.
+   * Also clears matching ProcessedLessonFile rows so files can be re-embedded.
+   */
+  static async deleteEmbeddings(req: Request, res: Response) {
+    try {
+      const body = (req.body || {}) as {
+        sourceUrl?: string;
+        url?: string;
+        s3Key?: string;
+        s3Keys?: string[] | string;
+        lessonId?: string;
+        courseId?: string;
+      };
+
+      const sourceUrl = String(body.sourceUrl || body.url || "").trim();
+      const lessonId = String(body.lessonId || "").trim();
+      const courseId = String(body.courseId || "").trim();
+      const s3KeysRaw = Array.isArray(body.s3Keys)
+        ? body.s3Keys
+        : typeof body.s3Keys === "string" && body.s3Keys.trim()
+        ? [body.s3Keys]
+        : body.s3Key
+        ? [body.s3Key]
+        : [];
+      const s3Keys = s3KeysRaw
+        .map((key) => normalizeStorageKey(String(key)))
+        .filter(Boolean);
+
+      if (!sourceUrl && !s3Keys.length && !lessonId && !courseId) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Provide at least one of: sourceUrl (or url), s3Key/s3Keys, lessonId, courseId",
+        });
+      }
+
+      if (lessonId && !mongoose.Types.ObjectId.isValid(lessonId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid lessonId",
+        });
+      }
+      if (courseId && !mongoose.Types.ObjectId.isValid(courseId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid courseId",
+        });
+      }
+
+      const qdrantResult = await deleteQdrantPointsByFilter({
+        sourceUrl: sourceUrl || undefined,
+        s3Keys: s3Keys.length ? s3Keys : undefined,
+        lessonId: lessonId || undefined,
+        courseId: courseId || undefined,
+        matchS3KeysAlone: true,
+      });
+
+      const processedFilter: Record<string, unknown> = {};
+      if (lessonId) {
+        processedFilter.lesson = new mongoose.Types.ObjectId(lessonId);
+      }
+      if (courseId) {
+        processedFilter.course = new mongoose.Types.ObjectId(courseId);
+      }
+      if (s3Keys.length === 1) {
+        processedFilter.fileKey = s3Keys[0];
+      } else if (s3Keys.length > 1) {
+        processedFilter.fileKey = { $in: s3Keys };
+      }
+
+      let processedRemoved = 0;
+      if (Object.keys(processedFilter).length > 0) {
+        const deleted = await ProcessedLessonFile.deleteMany(processedFilter);
+        processedRemoved = deleted.deletedCount || 0;
+      }
+
+      if (!qdrantResult.success) {
+        return res.status(207).json({
+          success: false,
+          message: "Failed to delete some embeddings from Qdrant",
+          response: {
+            collectionName: COLLECTION_NAME,
+            qdrant: qdrantResult,
+            processedLessonFilesRemoved: processedRemoved,
+          },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          qdrantResult.deletedPoints > 0
+            ? `Removed ${qdrantResult.deletedPoints} vector point(s) from Qdrant`
+            : "No matching vector points found in Qdrant",
+        response: {
+          collectionName: COLLECTION_NAME,
+          filter: {
+            sourceUrl: sourceUrl || null,
+            s3Keys: s3Keys.length ? s3Keys : null,
+            lessonId: lessonId || null,
+            courseId: courseId || null,
+          },
+          qdrant: qdrantResult,
+          processedLessonFilesRemoved: processedRemoved,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error deleting embeddings from Qdrant",
+        error: error.message,
+      });
+    }
+  }
+
+  /** How many indexed passages exist for each storage key (PDF/video library files). */
+  static async embeddingCounts(req: Request, res: Response) {
+    try {
+      const raw = (req.body as { s3Keys?: unknown })?.s3Keys;
+      const keys = (Array.isArray(raw) ? raw : [])
+        .map((key) => normalizeStorageKey(String(key)))
+        .filter(Boolean)
+        .slice(0, 100);
+
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        keys.map(async (key) => {
+          try {
+            const result = (await handleQdrantOperation(
+              async () =>
+                qdrant.count(COLLECTION_NAME, {
+                  exact: true,
+                  filter: {
+                    should: [
+                      { key: "s3Key", match: { value: key } },
+                      { key: "pdfKey", match: { value: key } },
+                    ],
+                  } as any,
+                }),
+              "qdrant count for key"
+            )) as { count?: number };
+            counts[key] = Number(result?.count || 0);
+          } catch {
+            counts[key] = 0;
+          }
+        })
+      );
+
+      return res.status(200).json({ success: true, response: counts });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error counting indexed passages",
+        error: error.message,
+      });
+    }
+  }
+
+  /** Counterpart to POST /process-from-url: remove points for that exact source URL. */
+  static async deleteFromUrl(req: Request, res: Response) {
+    try {
+      const url = String((req.body as { url?: string })?.url || "").trim();
+      if (!url) {
+        return res.status(400).json({
+          success: false,
+          message: "url is required",
+        });
+      }
+
+      const qdrantResult = await deleteQdrantPointsByFilter({ sourceUrl: url });
+      if (!qdrantResult.success) {
+        return res.status(207).json({
+          success: false,
+          message: "Failed to delete Qdrant points for URL",
+          response: { url, collectionName: COLLECTION_NAME, qdrant: qdrantResult },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          qdrantResult.deletedPoints > 0
+            ? `Removed ${qdrantResult.deletedPoints} vector point(s) for URL`
+            : "No vector points found for URL",
+        response: {
+          url,
+          collectionName: COLLECTION_NAME,
+          qdrant: qdrantResult,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Error deleting embeddings for URL",
         error: error.message,
       });
     }
