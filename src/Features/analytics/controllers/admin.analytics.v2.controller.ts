@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import User from "../../user/schema/user.schema";
+import mongoose from "mongoose";
 import Enroll from "../../course/schema/enroll.schema";
 import QuizResponse from "../../quiz/schema/quizResponse.schema";
 import FlashCardCompletion from "../../flashcard/schema/flashcardLeaderboard.schema";
@@ -111,7 +112,7 @@ export class AdminAnalyticsV2Controller {
         User.countDocuments({ role: Roles.USER, status: Status.INACTIVE }),
         Enroll.countDocuments({}),
         Enroll.countDocuments({ status: "ACTIVE" }),
-        Enroll.countDocuments({ status: { $ne: "ACTIVE" } }),
+        Enroll.countDocuments({ status: mongoose.trusted({ $ne: "ACTIVE" }) }),
         User.aggregate([
           { $match: { role: Roles.USER, ...dateMatch } },
           {
@@ -362,7 +363,7 @@ export class AdminAnalyticsV2Controller {
       ] = await Promise.all([
         Enroll.countDocuments({}),
         Enroll.countDocuments({ status: "ACTIVE" }),
-        Enroll.countDocuments({ status: { $ne: "ACTIVE" } }),
+        Enroll.countDocuments({ status: mongoose.trusted({ $ne: "ACTIVE" }) }),
         Enroll.aggregate([
           { $match: { ...dateMatch } },
           {
