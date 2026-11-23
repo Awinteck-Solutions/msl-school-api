@@ -16,6 +16,7 @@ export enum SubscriptionInvoiceStatus {
 export enum SubscriptionContentStatus {
   ACTIVE = "ACTIVE",
   DEACTIVE = "DEACTIVE",
+  AI_USE = "AI-USE",
 }
 
 export enum SubscriptionResourceFileStatus {

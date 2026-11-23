@@ -4,7 +4,7 @@ import AiUsage from "../Features/mslAi/schema/aiUsage.schema";
 
 dotenv.config();
 
-const INDEX_NAME = "createdAt_1_student_1";
+const INDEX_NAMES = ["createdAt_1_student_1", "source_1_createdAt_1_student_1"];
 
 /**
  * Builds the AiUsage { createdAt: 1, student: 1 } index used by admin
@@ -26,14 +26,16 @@ const ensureAiUsageCreatedAtIndex = async () => {
 
   try {
     const before = await AiUsage.collection.indexes();
-    const alreadyPresent = before.some((index) => index.name === INDEX_NAME);
+    const missing = INDEX_NAMES.filter(
+      (name) => !before.some((index) => index.name === name)
+    );
 
-    if (alreadyPresent) {
-      console.log(`${INDEX_NAME} already exists. No build started.`);
+    if (!missing.length) {
+      console.log(`${INDEX_NAMES.join(", ")} already exist. No build started.`);
     } else {
-      console.log(`Building ${INDEX_NAME}. This can take a while on a large AiUsage collection.`);
+      console.log(`Building ${missing.join(", ")}. This can take a while on a large AiUsage collection.`);
       await AiUsage.createIndexes();
-      console.log(`${INDEX_NAME} build finished.`);
+      console.log(`${missing.join(", ")} build finished.`);
     }
 
     const after = await AiUsage.collection.indexes();

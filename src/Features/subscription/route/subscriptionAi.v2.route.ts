@@ -7,6 +7,7 @@ import { authorization } from "../../../middlewares/authorization.middleware";
 import { requireActiveSubscription } from "../../../middlewares/requireActiveSubscription.middleware";
 import { Roles } from "../../../enums/roles.enum";
 import { SubscriptionAiV2Controller } from "../controllers/subscriptionAi.v2.controller";
+import { AiVoiceController } from "../../geminiAi/controllers/aiVoice.controller";
 
 const Router = express.Router();
 
@@ -15,6 +16,10 @@ Router.use(
   authorization([Roles.USER, Roles.ADMIN]),
   requireActiveSubscription
 );
+
+Router.get("/voices", (req: Request, res: Response) => {
+  AiVoiceController.listEnabled(req, res);
+});
 
 const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -99,6 +104,10 @@ Router.get("/history", (req: Request, res: Response) => {
 
 Router.get("/recent-activity", (req: Request, res: Response) => {
   SubscriptionAiV2Controller.nonChatHistory(req, res);
+});
+
+Router.get("/generation-status", (req: Request, res: Response) => {
+  SubscriptionAiV2Controller.generationStatus(req, res);
 });
 
 Router.get("/summaries", (req: Request, res: Response) => {

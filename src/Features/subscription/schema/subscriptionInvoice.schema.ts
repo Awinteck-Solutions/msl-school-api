@@ -36,6 +36,11 @@ const subscriptionInvoiceSchema = new Schema(
     accessCode: { type: String, default: null },
     paystackData: { type: Schema.Types.Mixed, required: false },
     lastReminderAt: { type: Date, default: null },
+    planId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SubscriptionPlan",
+      default: null,
+    },
   },
   { timestamps: true }
 );

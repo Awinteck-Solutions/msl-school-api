@@ -36,7 +36,16 @@ import adminSubscriptionRoutes from "../Features/subscription/route/admin.subscr
 import subscriptionAiRoutes from "../Features/subscription/route/subscriptionAi.v2.route";
 import pastQuestionRoutes from "../Features/pastQuestion/route/pastQuestion.v2.route";
 import adminPastQuestionRoutes from "../Features/pastQuestion/route/admin.pastQuestion.v2.route";
+import adminAccessRoutes from "../Features/access/route/admin.access.v2.route";
+import adminAiReviewRoutes from "../Features/access/route/admin.aiReview.v2.route";
+import { adminAccessGate } from "../middlewares/adminAccess.middleware";
 const Router = express.Router();
+
+Router.use("/admin", adminAccessGate);
+Router.use("/system", (req, res, next) => {
+  if (req.path.startsWith("/update-available")) return next();
+  return adminAccessGate(req, res, next);
+});
 
 Router.use("/user", userV2Routes);
 Router.use("/course", courseV2Routes);
@@ -74,6 +83,8 @@ Router.use("/admin/subscription", adminSubscriptionRoutes);
 Router.use("/subscription-ai", subscriptionAiRoutes);
 Router.use("/past-questions", pastQuestionRoutes);
 Router.use("/admin/past-questions", adminPastQuestionRoutes);
+Router.use("/admin/access", adminAccessRoutes);
+Router.use("/admin/ai", adminAiReviewRoutes);
 
 
 export { Router as v2Router };

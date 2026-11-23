@@ -15,25 +15,25 @@ import AiUsage from "../../mslAi/schema/aiUsage.schema";
 import Lesson from "../../lesson/schema/lesson.schema";
 import mongoose from "mongoose";
 import SubscriptionPlan from "../../subscription/schema/subscriptionPlan.schema";
+import { resolveTtsVoice } from "./aiVoice.service";
 
 export const COLLECTION_NAME = "gemini_ai";
 export const SUBSCRIPTION_COLLECTION_NAME =
   process.env.GEMINI_SUBSCRIPTION_COLLECTION || "gemini_ai_subscription";
 export const GEMINI_CHAT_MODEL =
-  process.env.GEMINI_CHAT_MODEL || "gemini-2.5-flash";
+  process.env.GEMINI_CHAT_MODEL || "gemini-4-hydrogen";
 export const GEMINI_EMBEDDING_MODEL =
   process.env.GEMINI_EMBEDDING_MODEL || "gemini-embedding-001";
 export const GEMINI_AUDIO_MODEL =
-  process.env.GEMINI_AUDIO_MODEL ||
-  "gemini-2.5-flash";
+  process.env.GEMINI_AUDIO_MODEL || "gemini-3.5-transcribe";
 export const GEMINI_AUDIO_METHOD =
   process.env.GEMINI_AUDIO_METHOD || "generateContent";
 export const GEMINI_TTS_MODEL =
-  process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
+  process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-tts";
 export const GEMINI_TTS_VOICE =
   process.env.GEMINI_TTS_VOICE || "Aoede";
 export const GEMINI_LIVE_MODEL =
-  process.env.GEMINI_LIVE_MODEL || "gemini-2.5-flash-live";
+  process.env.GEMINI_LIVE_MODEL || "gemini-3.8-live";
 export const GEMINI_LIVE_AUDIO_MIME =
   process.env.GEMINI_LIVE_AUDIO_MIME || "audio/pcm;rate=24000";
 export const GEMINI_EMBEDDING_DIMENSIONS = 768;
@@ -109,9 +109,36 @@ export const callGeminiAudioTranscription = async (params: {
   return { text, raw: data };
 };
 
+function speechVoiceConfig(voice: string) {
+  if (voice.startsWith("voice_") || voice.startsWith("voicekey_")) {
+    return { voice };
+  }
+  return {
+    prebuiltVoiceConfig: {
+      voiceName: voice,
+    },
+  };
+}
+
+const ttsVoiceCache = new Map<string, { voice: string; at: number }>();
+const TTS_VOICE_CACHE_MS = 60_000;
+
+/** Resolve once per voice selection so sentence-chunked TTS does not hit Mongo on every phrase. */
+export const resolveCachedTtsVoice = async (voiceId?: string, voiceName?: string) => {
+  const key = `${voiceId || ""}|${voiceName || ""}`;
+  const hit = ttsVoiceCache.get(key);
+  if (hit && Date.now() - hit.at < TTS_VOICE_CACHE_MS) return hit.voice;
+  const voice = await resolveTtsVoice(voiceId, voiceName);
+  ttsVoiceCache.set(key, { voice, at: Date.now() });
+  return voice;
+};
+
 export const callGeminiTts = async (params: {
   text: string;
   voiceName?: string;
+  voiceId?: string;
+  /** Pre-resolved Gemini voice name — skips another DB lookup. */
+  voice?: string;
 }) => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -123,6 +150,9 @@ export const callGeminiTts = async (params: {
     text = `${text.slice(0, MAX_TTS_CHARS).trim()}...`;
   }
 
+  const voice =
+    params.voice ||
+    (await resolveCachedTtsVoice(params.voiceId, params.voiceName));
   const modelName = GEMINI_TTS_MODEL.replace(/^models\//, "");
   const url = `${GEMINI_API_BASE}/${modelName}:generateContent?key=${apiKey}`;
   const body = {
@@ -135,16 +165,12 @@ export const callGeminiTts = async (params: {
     generationConfig: {
       responseModalities: ["AUDIO"],
       speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName: params.voiceName || GEMINI_TTS_VOICE,
-          },
-        },
+        voiceConfig: speechVoiceConfig(voice),
       },
     },
   };
 
-  const maxAttempts = 3;
+  const maxAttempts = 2;
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -178,14 +204,51 @@ export const callGeminiTts = async (params: {
     } catch (error: any) {
       lastError = error;
       if (attempt < maxAttempts) {
-        const delayMs = 500 * attempt;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
         continue;
       }
     }
   }
 
   throw lastError || new Error("Gemini TTS request failed");
+};
+
+const parsePcmSampleRate = (mimeType?: string) => {
+  const match = String(mimeType || "").match(/rate=(\d+)/i);
+  const rate = match ? Number(match[1]) : 24000;
+  return Number.isFinite(rate) && rate > 0 ? rate : 24000;
+};
+
+const buildPcmWavHeader = (dataLength: number, sampleRate: number) => {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataLength, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(dataLength, 40);
+  return header;
+};
+
+/** Convert Gemini TTS inline audio (PCM or WAV) into a single playable WAV base64 string. */
+export const geminiTtsToWavBase64 = (dataBase64: string, mimeType?: string) => {
+  const audioBuffer = Buffer.from(dataBase64, "base64");
+  const isWav =
+    mimeType?.toLowerCase().includes("wav") &&
+    audioBuffer.toString("ascii", 0, 4) === "RIFF";
+  if (isWav) return dataBase64;
+  const sampleRate = parsePcmSampleRate(mimeType);
+  return Buffer.concat([
+    buildPcmWavHeader(audioBuffer.length, sampleRate),
+    audioBuffer,
+  ]).toString("base64");
 };
 
 export const qdrant = new QdrantClient({
@@ -1294,24 +1357,15 @@ export const checkSubscriptionAiLimits = async (studentId: string) => {
       };
     }
 
-    const plan = await SubscriptionPlan.findOneAndUpdate(
-      {},
-      {
-        $setOnInsert: {
-          amount: 0,
-          currency: "NGN",
-          intervalDays: 30,
-          gracePeriodDays: 7,
-          reminderDaysBeforeExpiry: 3,
-          dailyAiLimit: 10,
-          monthlyAiLimit: 100,
-          isActive: false,
-          description:
-            "Monthly AI subscription for past questions and AI usage limits",
-        },
-      },
-      { upsert: true, new: true }
-    );
+    const plan =
+      (await SubscriptionPlan.findOne({ code: "monthly" })) ||
+      (await SubscriptionPlan.findOne({}).sort({ sortOrder: 1, createdAt: 1 }));
+    if (!plan) {
+      return {
+        allowed: false,
+        reason: "Subscription plan is not configured",
+      };
+    }
 
     const dailyLimit = plan.dailyAiLimit;
     const monthlyLimit = plan.monthlyAiLimit;

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
+import { videoTimestampSchema } from "../../../helpers/videoTimestamps";
 
 const linkedCourses = {
   course: {
@@ -59,6 +60,7 @@ const lessonSchema = new Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
     },
+    videoTimestamps: { type: [videoTimestampSchema], default: [] },
   },
   { timestamps: true }
 );

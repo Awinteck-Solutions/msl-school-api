@@ -18,6 +18,14 @@ Router.get(
 );
 
 Router.get(
+  "/resources/:id",
+  authentification,
+  (req: Request, res: Response) => {
+    SubscriptionV2Controller.resource(req, res);
+  }
+);
+
+Router.get(
   "/status",
   authentification,
   (req: Request, res: Response) => {

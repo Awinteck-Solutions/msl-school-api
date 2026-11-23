@@ -2125,15 +2125,7 @@ export class AdminGeminiAiV2Controller {
         999
       );
 
-      const monthMatch = {
-        createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-      };
-
-      const [globalLimitsDoc, monthHasUsage] = await Promise.all([
-        GlobalAiLimit.findOne({}),
-        AiUsage.exists(monthMatch),
-      ]);
-
+      const globalLimitsDoc = await GlobalAiLimit.findOne({}).lean();
       const globalLimits =
         globalLimitsDoc ||
         ({
@@ -2141,8 +2133,29 @@ export class AdminGeminiAiV2Controller {
           monthlyLimit: 100,
         } as any);
 
-      if (!monthHasUsage) {
-        return res.status(200).json({
+      // Read only student ids from the course index. Aggregating here loads every stored answer.
+      const seen = new Set<string>();
+      const studentIds: mongoose.Types.ObjectId[] = [];
+      const cursor = AiUsage.collection.find(
+        {
+          source: "course",
+          createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+        },
+        {
+          projection: { student: 1, _id: 0 },
+          hint: "source_1_createdAt_1_student_1",
+        }
+      );
+      for await (const doc of cursor) {
+        if (!doc.student) continue;
+        const key = String(doc.student);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        studentIds.push(doc.student);
+      }
+
+      const emptyPage = () =>
+        res.status(200).json({
           success: true,
           message: "No students used AI this month",
           pagination: {
@@ -2161,131 +2174,87 @@ export class AdminGeminiAiV2Controller {
             studentsUsingGlobalLimits: 0,
           },
         });
-      }
 
-      const pipeline: mongoose.PipelineStage[] = [
-        { $match: monthMatch },
-        { $group: { _id: "$student" } },
-        {
-          $lookup: {
-            from: User.collection.name,
-            localField: "_id",
-            foreignField: "_id",
-            as: "user",
-          },
-        },
-        { $unwind: "$user" },
-        {
-          $project: {
-            user: {
-              _id: "$user._id",
-              email: "$user.email",
-              firstname: "$user.firstname",
-              lastname: "$user.lastname",
-              image: "$user.image",
-              ai_limit: "$user.ai_limit",
-              createdAt: "$user.createdAt",
-            },
-          },
-        },
-      ];
+      if (!studentIds.length) return emptyPage();
 
+      const userFilter: Record<string, unknown> = { _id: { $in: studentIds } };
       if (search) {
         const searchRegex = escapeLiteralRegex(search);
-        pipeline.push({
-          $match: {
-            $or: [
-              { "user.email": { $regex: searchRegex, $options: "i" } },
-              { "user.firstname": { $regex: searchRegex, $options: "i" } },
-              { "user.lastname": { $regex: searchRegex, $options: "i" } },
-              {
-                $expr: {
-                  $regexMatch: {
-                    input: {
-                      $concat: ["$user.firstname", " ", "$user.lastname"],
-                    },
-                    regex: searchRegex,
-                    options: "i",
-                  },
-                },
+        userFilter.$or = [
+          { email: { $regex: searchRegex, $options: "i" } },
+          { firstname: { $regex: searchRegex, $options: "i" } },
+          { lastname: { $regex: searchRegex, $options: "i" } },
+          {
+            $expr: {
+              $regexMatch: {
+                input: { $concat: ["$firstname", " ", "$lastname"] },
+                regex: searchRegex,
+                options: "i",
               },
-            ],
+            },
           },
-        });
+        ];
       }
 
-      pipeline.push(
-        { $sort: { "user.createdAt": -1, "user._id": -1 } },
-        {
-          $facet: {
-            metadata: [{ $count: "total" }],
-            data: [{ $skip: skip }, { $limit: limit }],
-          },
-        }
-      );
-
-      const aggregated = await AiUsage.aggregate(pipeline).allowDiskUse(true);
-      const pageResult = aggregated[0] || { metadata: [], data: [] };
-      const totalUsers = pageResult.metadata?.[0]?.total || 0;
-      const pageRows = pageResult.data || [];
-      const orderedIds = pageRows.map((row: { user: { _id: unknown } }) => row.user._id);
+      const [totalUsers, users] = await Promise.all([
+        User.countDocuments(userFilter),
+        User.find(userFilter)
+          .select("_id email firstname lastname image ai_limit createdAt")
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+      ]);
 
       const usageByStudent: Record<
         string,
         { daily: number; monthly: number; total: number }
       > = {};
-      let users: any[] = [];
 
-      if (orderedIds.length > 0) {
-        const [foundUsers, usageAgg] = await Promise.all([
-          User.find({ _id: { $in: orderedIds } }).select(
-            "_id email firstname lastname image ai_limit createdAt"
-          ),
-          AiUsage.aggregate([
-            { $match: { student: { $in: orderedIds } } },
-            {
-              $group: {
-                _id: "$student",
-                total: { $sum: 1 },
-                daily: {
-                  $sum: {
-                    $cond: [
-                      {
-                        $and: [
-                          { $gte: ["$createdAt", today] },
-                          { $lt: ["$createdAt", tomorrow] },
-                        ],
-                      },
-                      1,
-                      0,
-                    ],
-                  },
+      if (users.length > 0) {
+        const pageIds = users.map((user: any) => user._id);
+        const usageAgg = await AiUsage.aggregate([
+          {
+            $match: {
+              student: { $in: pageIds },
+              source: "course",
+            },
+          },
+          {
+            $group: {
+              _id: "$student",
+              total: { $sum: 1 },
+              daily: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $gte: ["$createdAt", today] },
+                        { $lt: ["$createdAt", tomorrow] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
                 },
-                monthly: {
-                  $sum: {
-                    $cond: [
-                      {
-                        $and: [
-                          { $gte: ["$createdAt", startOfMonth] },
-                          { $lte: ["$createdAt", endOfMonth] },
-                        ],
-                      },
-                      1,
-                      0,
-                    ],
-                  },
+              },
+              monthly: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $gte: ["$createdAt", startOfMonth] },
+                        { $lte: ["$createdAt", endOfMonth] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
                 },
               },
             },
-          ]).allowDiskUse(true),
-        ]);
-
-        const usersById = new Map(
-          foundUsers.map((user: any) => [user._id.toString(), user])
-        );
-        users = orderedIds
-          .map((id: any) => usersById.get(id.toString()))
-          .filter(Boolean);
+          },
+        ]).allowDiskUse(true);
 
         usageAgg.forEach((item) => {
           usageByStudent[item._id.toString()] = {
@@ -2425,16 +2394,19 @@ export class AdminGeminiAiV2Controller {
         999
       );
 
+      const courseOnly = { source: "course" };
       const [dailyUsage, monthlyUsage, totalUsage] = await Promise.all([
         AiUsage.countDocuments({
           student: studentId,
           createdAt: { $gte: today, $lt: tomorrow },
+          ...courseOnly,
         }),
         AiUsage.countDocuments({
           student: studentId,
           createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+          ...courseOnly,
         }),
-        AiUsage.countDocuments({ student: studentId }),
+        AiUsage.countDocuments({ student: studentId, ...courseOnly }),
       ]);
 
       return res.status(200).json({

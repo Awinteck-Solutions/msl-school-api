@@ -7,6 +7,8 @@ import {
   buildContentFilter,
   callGeminiAudioTranscription,
   callGeminiTts,
+  geminiTtsToWavBase64,
+  resolveCachedTtsVoice,
   checkSubscriptionAiLimits,
   embedText,
   estimateTokens,
@@ -17,6 +19,7 @@ import {
 import AiUsage from "../../mslAi/schema/aiUsage.schema";
 import { recordStudentActivity } from "../../gamification/service/gamification.service";
 import { getUserEnrolledCourseIds } from "./subscription.service";
+import { enqueueGeneration, generationStatus as readGenerationStatus } from "../../geminiAi/generationJob.service";
 
 const GENERAL_SYSTEM_PROMPT = `
 You are a helpful AI assistant with access to MSL learning materials and general knowledge. Answer the question using the provided MSL context when available and relevant. Even when the MSL context is available, still use your general subject knowledge to enhance and modify the response so it is accurate, relevant, and complete. If the MSL context doesn't contain sufficient information to answer the question, use your general knowledge to provide a helpful and accurate response. Always be informative and educational in your responses.
@@ -154,14 +157,15 @@ const toWavChunks = (
   return chunks;
 };
 
-const findLastBoundaryIndex = (text: string) => {
-  const boundaryRegex = /[\.,!\?\;:\)\]\}]/;
+const findLastBoundaryIndex = (text: string, minChars = 48) => {
+  if (String(text || "").trim().length < minChars) return -1;
+  const sentence = /[.!?…](?=\s|$)/g;
   let lastIndex = -1;
-  for (let i = 0; i < text.length; i += 1) {
-    if (boundaryRegex.test(text[i])) {
-      lastIndex = i;
-    }
-  }
+  let match: RegExpExecArray | null;
+  while ((match = sentence.exec(text)) !== null) lastIndex = match.index;
+  if (lastIndex >= 0) return lastIndex;
+  const soft = /[,;:](?=\s|$)/g;
+  while ((match = soft.exec(text)) !== null) lastIndex = match.index;
   return lastIndex;
 };
 
@@ -645,7 +649,38 @@ export class SubscriptionAiV2Controller {
     }
   }
 
-  static async summarize(req: Request, res: Response) {
+  static generationStatus(req: Request, res: Response) {
+    return readGenerationStatus(req, res, "subscription");
+  }
+
+  static summarize(req: Request, res: Response) {
+    return enqueueGeneration(
+      req,
+      res,
+      { source: "subscription", queryType: "summarize", label: "Summary" },
+      (jobReq, jobRes) => SubscriptionAiV2Controller.runSummarize(jobReq, jobRes)
+    );
+  }
+
+  static generateFlashcards(req: Request, res: Response) {
+    return enqueueGeneration(
+      req,
+      res,
+      { source: "subscription", queryType: "generate-flashcards", label: "Flashcards" },
+      (jobReq, jobRes) => SubscriptionAiV2Controller.runGenerateFlashcards(jobReq, jobRes)
+    );
+  }
+
+  static generateQuiz(req: Request, res: Response) {
+    return enqueueGeneration(
+      req,
+      res,
+      { source: "subscription", queryType: "generate-quiz", label: "Quiz" },
+      (jobReq, jobRes) => SubscriptionAiV2Controller.runGenerateQuiz(jobReq, jobRes)
+    );
+  }
+
+  static async runSummarize(req: Request, res: Response) {
     try {
       const currentUser = req["currentUser"] as { id?: string; email?: string };
       const { s3Keys, resourceId } = req.body as {
@@ -716,7 +751,7 @@ export class SubscriptionAiV2Controller {
     }
   }
 
-  static async generateFlashcards(req: Request, res: Response) {
+  static async runGenerateFlashcards(req: Request, res: Response) {
     try {
       const currentUser = req["currentUser"] as { id?: string; email?: string };
       const { s3Keys, count = 10, resourceId } = req.body as {
@@ -812,7 +847,7 @@ export class SubscriptionAiV2Controller {
     }
   }
 
-  static async generateQuiz(req: Request, res: Response) {
+  static async runGenerateQuiz(req: Request, res: Response) {
     try {
       const currentUser = req["currentUser"] as { id?: string; email?: string };
       const { s3Keys, numQuestions = 5, resourceId } = req.body as {
@@ -1132,11 +1167,12 @@ export class SubscriptionAiV2Controller {
   ) {
     try {
       const currentUser = req["currentUser"] as { id?: string; email?: string };
-      const { question, s3Keys, resourceId, voiceName } = req.body as {
+      const { question, s3Keys, resourceId, voiceName, voiceId } = req.body as {
         question?: string;
         s3Keys?: string[];
         resourceId?: string;
         voiceName?: string;
+        voiceId?: string;
       };
       if (!question) {
         return res.status(400).json({
@@ -1192,6 +1228,10 @@ export class SubscriptionAiV2Controller {
         question,
         historyText || "No prior chat history."
       );
+      const resolvedVoice = await resolveCachedTtsVoice(
+        voiceId || undefined,
+        voiceName || undefined
+      );
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -1237,56 +1277,55 @@ export class SubscriptionAiV2Controller {
         }
       };
 
+      const emitTtsChunk = (emitText: string) => {
+        const spoken = String(emitText || "").trim();
+        if (!spoken) return;
+        const currentIndex = chunkIndex++;
+        pendingAudio += 1;
+        callGeminiTts({ text: spoken, voice: resolvedVoice })
+          .then(({ dataBase64, mimeType }) => {
+            const wav = geminiTtsToWavBase64(dataBase64, mimeType);
+            res.write(
+              `event: audio\ndata: ${JSON.stringify({
+                chunkIndex: currentIndex,
+                audio: wav,
+                mimeType: "audio/wav",
+                isFinal: true,
+              })}\n\n`
+            );
+          })
+          .catch((error: any) => {
+            res.write(
+              `event: error\ndata: ${JSON.stringify({
+                message: "TTS failed",
+                error: error.message,
+                chunkIndex: currentIndex,
+              })}\n\n`
+            );
+          })
+          .finally(() => {
+            pendingAudio -= 1;
+            void maybeEnd();
+          });
+      };
+
       try {
         for await (const chunk of streamResult.stream) {
           const content = removeAsterisks(chunk.text());
           if (!content) continue;
           fullAnswer += content;
           pendingText += content;
-          const boundaryIndex = findLastBoundaryIndex(pendingText);
-          if (boundaryIndex < 0) continue;
-
-          const emitText = pendingText.slice(0, boundaryIndex + 1);
-          pendingText = pendingText.slice(boundaryIndex + 1);
-          const currentIndex = chunkIndex++;
           res.write(
             `event: text\ndata: ${JSON.stringify({
-              text: emitText,
+              text: content,
               isFinal: false,
-              chunkIndex: currentIndex,
             })}\n\n`
           );
-          pendingAudio += 1;
-          callGeminiTts({
-            text: emitText,
-            voiceName: voiceName || undefined,
-          })
-            .then(({ dataBase64, mimeType }) => {
-              const wavChunks = toWavChunks(dataBase64, mimeType, 32000);
-              for (let i = 0; i < wavChunks.length; i += 1) {
-                res.write(
-                  `event: audio\ndata: ${JSON.stringify({
-                    chunkIndex: currentIndex,
-                    audio: wavChunks[i],
-                    mimeType: "audio/wav",
-                    isFinal: i + 1 >= wavChunks.length,
-                  })}\n\n`
-                );
-              }
-            })
-            .catch((error: any) => {
-              res.write(
-                `event: error\ndata: ${JSON.stringify({
-                  message: "TTS failed",
-                  error: error.message,
-                  chunkIndex: currentIndex,
-                })}\n\n`
-              );
-            })
-            .finally(() => {
-              pendingAudio -= 1;
-              void maybeEnd();
-            });
+          const boundaryIndex = findLastBoundaryIndex(pendingText);
+          if (boundaryIndex < 0) continue;
+          const emitText = pendingText.slice(0, boundaryIndex + 1);
+          pendingText = pendingText.slice(boundaryIndex + 1);
+          emitTtsChunk(emitText);
         }
       } catch (streamError: any) {
         if (res.headersSent) {
@@ -1308,45 +1347,8 @@ export class SubscriptionAiV2Controller {
       }
 
       if (pendingText.trim().length > 0) {
-        const currentIndex = chunkIndex++;
-        res.write(
-          `event: text\ndata: ${JSON.stringify({
-            text: pendingText,
-            isFinal: false,
-            chunkIndex: currentIndex,
-          })}\n\n`
-        );
-        pendingAudio += 1;
-        callGeminiTts({
-          text: pendingText,
-          voiceName: voiceName || undefined,
-        })
-          .then(({ dataBase64, mimeType }) => {
-            const wavChunks = toWavChunks(dataBase64, mimeType, 32000);
-            for (let i = 0; i < wavChunks.length; i += 1) {
-              res.write(
-                `event: audio\ndata: ${JSON.stringify({
-                  audio: wavChunks[i],
-                  mimeType: "audio/wav",
-                  chunkIndex: currentIndex,
-                  isFinal: i + 1 >= wavChunks.length,
-                })}\n\n`
-              );
-            }
-          })
-          .catch((error: any) => {
-            res.write(
-              `event: error\ndata: ${JSON.stringify({
-                message: "TTS failed",
-                error: error.message,
-                chunkIndex: currentIndex,
-              })}\n\n`
-            );
-          })
-          .finally(() => {
-            pendingAudio -= 1;
-            void maybeEnd();
-          });
+        emitTtsChunk(pendingText);
+        pendingText = "";
       }
 
       res.write(

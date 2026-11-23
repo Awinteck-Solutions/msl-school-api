@@ -3,6 +3,7 @@ import User from "../schema/user.schema";
 import { Roles } from "../../../enums/roles.enum";
 import { encrypt } from "../../../helpers/tokenizer";
 import getRandomInt from "../../../helpers/random";
+import { loginAccessSnapshot } from "../../subscription/controllers/subscription.service";
 
 export class AdminUserV2Controller {
   static async nonUserAuth(req: Request, res: Response) {
@@ -28,7 +29,7 @@ export class AdminUserV2Controller {
         { device_id },
         { upsert: false }
       )
-        .then((value) => {
+        .then(async (value) => {
           if (!value) {
             return res.status(404).json({
               status: false,
@@ -44,6 +45,7 @@ export class AdminUserV2Controller {
             role: value.role,
             status: value.status,
           });
+          const access = await loginAccessSnapshot(String(value._id), value.email);
 
           return res.status(200).json({
             status: true,
@@ -51,7 +53,8 @@ export class AdminUserV2Controller {
               value.device_id !== device_id
                 ? "You were logged out of previous device"
                 : "Login success(apple)",
-            user: { ...value.toObject(), token },
+            ...access,
+            user: { ...value.toObject(), token, ...access },
           });
         })
         .catch((error) => {
@@ -75,7 +78,7 @@ export class AdminUserV2Controller {
         { firstname, lastname, email, auth_type, device_id },
         { upsert: false, new: true }
       )
-        .then((result) => {
+        .then(async (result) => {
           if (!result) {
             return res.status(404).json({
               status: false,
@@ -91,11 +94,13 @@ export class AdminUserV2Controller {
             role: result.role,
             status: result.status,
           });
+          const access = await loginAccessSnapshot(String(result._id), result.email);
 
           return res.status(200).json({
             status: true,
             message: "Login success(google)",
-            user: { ...result.toObject(), token },
+            ...access,
+            user: { ...result.toObject(), token, ...access },
           });
         })
         .catch((error) => {
@@ -241,7 +246,8 @@ export class AdminUserV2Controller {
   static async createNonUser(req: Request, res: Response) {
     try {
       const { firstname, lastname, email, role, status } = req.body;
-      if (!email || !role) {
+      const normalizedEmail = String(email || "").trim();
+      if (!normalizedEmail || !role) {
         return res.status(400).json({
           status: false,
           message: "email/role can't be empty",
@@ -254,33 +260,54 @@ export class AdminUserV2Controller {
         });
       }
 
-      const otp = getRandomInt(999, 9999);
+      const applyStaffRole = async (account: any) => {
+        if (firstname !== undefined) account.firstname = firstname;
+        if (lastname !== undefined) account.lastname = lastname;
+        account.role = role;
+        if (status) account.status = status;
+        return account.save();
+      };
 
-      const user = User({
-        firstname,
-        lastname,
-        email,
-        otp,
-        role,
-        status,
+      const existing = await User.findOne({
+        email: {
+          $regex: `^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+          $options: "i",
+        },
       });
-
-      user
-        .save()
-        .then((result) => {
-          return res.status(201).json({
-            status: true,
-            message: "New User registered",
-            user: result,
-          });
-        })
-        .catch((error) => {
-          return res.status(404).json({
-            status: false,
-            message: "Unsuccessful registration",
-            other: error,
-          });
+      if (existing) {
+        const saved = await applyStaffRole(existing);
+        return res.status(200).json({
+          status: true,
+          message: "Existing account updated",
+          user: saved,
         });
+      }
+
+      try {
+        const created = await User({
+          firstname,
+          lastname,
+          email: normalizedEmail,
+          otp: getRandomInt(999, 9999),
+          role,
+          status,
+        }).save();
+        return res.status(201).json({
+          status: true,
+          message: "New User registered",
+          user: created,
+        });
+      } catch (error: any) {
+        if (error?.code !== 11000) throw error;
+        const duplicate = await User.findOne({ email: error?.keyValue?.email || normalizedEmail });
+        if (!duplicate) throw error;
+        const saved = await applyStaffRole(duplicate);
+        return res.status(200).json({
+          status: true,
+          message: "Existing account updated",
+          user: saved,
+        });
+      }
     } catch (error: any) {
       return res.status(500).json({
         status: false,

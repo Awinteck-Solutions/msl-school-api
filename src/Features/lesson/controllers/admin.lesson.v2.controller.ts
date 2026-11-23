@@ -4,6 +4,7 @@ import multer from "multer";
 import Lesson from "../schema/lesson.schema";
 import Resource from "../schema/resource.schema";
 import { uploadFile, getFileStream } from "../../../helpers/s3";
+import { sanitizeVideoTimestamps } from "../../../helpers/videoTimestamps";
 
 interface MulterRequest extends Request {
   file?: multer.File;
@@ -897,6 +898,41 @@ export class AdminLessonV2Controller {
       return res.status(500).json({
         status: false,
         message: "System Error",
+      });
+    }
+  }
+
+  static async updateTimestamps(req: Request, res: Response) {
+    const id = String(req.params.id || "");
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ status: false, message: "Invalid lesson id" });
+    }
+    const markers = sanitizeVideoTimestamps(req.body?.videoTimestamps);
+    if (!markers) {
+      return res.status(400).json({
+        status: false,
+        message: "videoTimestamps must be a list of { slot, seconds, text }",
+      });
+    }
+    try {
+      const lesson = await Lesson.findByIdAndUpdate(
+        id,
+        { $set: { videoTimestamps: markers } },
+        { new: true }
+      );
+      if (!lesson) {
+        return res.status(404).json({ status: false, message: "Lesson not found" });
+      }
+      return res.status(200).json({
+        status: true,
+        message: "Video timestamps saved",
+        response: lesson,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to save video timestamps",
+        error: error?.message || error,
       });
     }
   }

@@ -45,6 +45,14 @@ Router.post("/reformat-all", (req: Request, res: Response) => {
   AdminPastQuestionV2Controller.reformatAll(req, res);
 });
 
+Router.get("/ai-limit", (req: Request, res: Response) => {
+  AdminPastQuestionV2Controller.getAiLimit(req, res);
+});
+
+Router.put("/ai-limit", (req: Request, res: Response) => {
+  AdminPastQuestionV2Controller.updateAiLimit(req, res);
+});
+
 Router.get("/", (req: Request, res: Response) => {
   AdminPastQuestionV2Controller.list(req, res);
 });

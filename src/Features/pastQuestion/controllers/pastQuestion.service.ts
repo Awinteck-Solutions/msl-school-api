@@ -34,23 +34,32 @@ import {
   extractFormattedQuestionsFromPdf,
   htmlToPlainText,
   normaliseNumber,
+  normalizePaperTitle,
   sanitizeQuestionHtml,
   textOverlap,
 } from "./pastQuestionFormat";
+
+export { normalizePaperTitle } from "./pastQuestionFormat";
 
 export const PAST_QUESTION_COLLECTION_NAME =
   process.env.GEMINI_PAST_QUESTION_COLLECTION || "gemini_ai_past_questions";
 
 const EXTRACT_QUESTIONS_PROMPT = `You extract exam past questions and suggested solutions from paper text.
-Return ONLY a JSON array. No markdown, no commentary.
-Each object must be:
+Return ONLY JSON (no markdown). Prefer this object shape:
 {
-  "number": "1" or "2(a)",
-  "question": "full question text",
-  "answer": "suggested solution if present, else empty string",
-  "answerNotes": "examiner comments or marking notes if present, else empty string",
-  "marks": number or null
+  "background": "Additional information, background, or pre-seen material that appears before Question 1, or empty string",
+  "questions": [
+    {
+      "number": "1" or "2(a)",
+      "question": "full question text",
+      "answer": "suggested solution if present, else empty string",
+      "answerNotes": "examiner comments or marking notes if present, else empty string",
+      "marks": number or null
+    }
+  ]
 }
+A plain JSON array of questions is also accepted for backward compatibility.
+Put ONLY material that appears before Question 1 in "background": additional information, background, pre-seen material, a case study, exhibits, or a scenario. Do not put numbered questions there. If that material was given its own heading, keep the heading.
 Split into individual numbered questions. Keep lettered parts together when they belong to one question.`;
 
 const INSIGHTS_PROMPT = `You are an ICAG exam analyst using the official ICAG Professional Qualification Syllabus 2024-2029.
@@ -539,7 +548,11 @@ const upsertPaperVectors = async (paper: any, items: any[]) => {
       .join("\n\n");
     texts.push({ text: blob, questionId: String(item._id) });
   }
-  if (paper.extractedText) {
+  if (paper.backgroundText) {
+    texts.push({
+      text: `Case study / pre-seen material:\n${paper.backgroundText}`,
+    });
+  } else if (paper.extractedText) {
     texts.push({ text: paper.extractedText });
   }
 
@@ -580,7 +593,19 @@ const upsertPaperVectors = async (paper: any, items: any[]) => {
   }
 };
 
-export const extractQuestionsFromText = async (text: string) => {
+export const extractQuestionsFromText = async (
+  text: string
+): Promise<{
+  backgroundText: string;
+  questions: Array<{
+    number: string;
+    question: string;
+    answer: string;
+    answerNotes: string;
+    marks: number | null;
+    order: number;
+  }>;
+}> => {
   const clipped = String(text || "").slice(0, 160000);
   const completion = await geminiChatModel.generateContent({
     contents: [
@@ -595,20 +620,60 @@ export const extractQuestionsFromText = async (text: string) => {
     ],
   });
   const parsed = parseJson(completion.response.text());
-  const rows = Array.isArray(parsed) ? parsed : [];
-  return rows
-    .filter((row) => row && typeof row.question === "string" && row.question.trim())
-    .map((row, index) => ({
-      number: String(row.number || index + 1).trim(),
-      question: String(row.question).trim(),
-      answer: String(row.answer || "").trim(),
-      answerNotes: String(row.answerNotes || row.answer_notes || "").trim(),
-      marks:
-        row.marks === null || row.marks === undefined || row.marks === ""
-          ? null
-          : Number(row.marks),
-      order: index,
-    }));
+  const rows = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray((parsed as any)?.questions)
+    ? (parsed as any).questions
+    : [];
+  let backgroundText = Array.isArray(parsed)
+    ? ""
+    : String(
+        (parsed as any)?.background ||
+          (parsed as any)?.backgroundText ||
+          (parsed as any)?.additional ||
+          (parsed as any)?.preSeen ||
+          ""
+      ).trim();
+  const questions = rows
+      .filter((row) => row && typeof row.question === "string" && row.question.trim())
+      .map((row, index) => ({
+        number: String(row.number || index + 1).trim(),
+        question: String(row.question).trim(),
+        answer: String(row.answer || "").trim(),
+        answerNotes: String(row.answerNotes || row.answer_notes || "").trim(),
+        marks:
+          row.marks === null || row.marks === undefined || row.marks === ""
+            ? null
+            : Number(row.marks),
+        order: index,
+      }));
+  if (!backgroundText && questions.length) {
+    const first = questions[0];
+    const number = String(first.number || "").trim();
+    const opening = String(first.question || "").replace(/\s+/g, " ").trim().slice(0, 160);
+    const heading =
+      /^(additional(?:\s+information|\s+material)?|background(?:\s+information|\s+material)?|pre[-\s]?seen(?:\s+material|\s+information)?|case\s*study)\b/i;
+    if (heading.test(number) || (heading.test(opening) && !/^\d/.test(number))) {
+      backgroundText = first.question;
+      questions.shift();
+      questions.forEach((item, index) => {
+        item.order = index;
+      });
+    }
+  }
+  return { backgroundText, questions };
+};
+
+const applyPaperBackground = (
+  paper: any,
+  backgroundHtml: string,
+  backgroundText?: string
+) => {
+  const html = sanitizeQuestionHtml(backgroundHtml);
+  const text = String(backgroundText || (html ? htmlToPlainText(html) : "")).trim();
+  paper.backgroundHtml = html;
+  paper.backgroundText = text;
+  paper.hasBackground = Boolean(html || text);
 };
 
 const generateInsightPayload = async (
@@ -650,8 +715,9 @@ const generateInsightPayload = async (
   };
 };
 
-const itemCorpus = (items: any[], paper: any) =>
-  items
+const itemCorpus = (items: any[], paper: any) => {
+  const background = String(paper?.backgroundText || "").trim();
+  const questions = items
     .map(
       (item) =>
         `[${paper.year} ${paper.sitting || ""} Q${item.number}]\n${item.question}\nAnswer: ${
@@ -659,6 +725,11 @@ const itemCorpus = (items: any[], paper: any) =>
         }\nNotes: ${item.answerNotes || ""}`
     )
     .join("\n\n");
+  if (background && questions) {
+    return `Case study / pre-seen material:\n${background}\n\n----\n\n${questions}`;
+  }
+  return questions || background;
+};
 
 export const refreshPaperInsights = async (paperId: string) => {
   const paper = await PastQuestionPaper.findById(paperId);
@@ -782,9 +853,13 @@ export const processPastQuestionPaper = async (paperId: string) => {
 
     // Prefer reading the PDF itself so tables and lists survive; fall back to plain text.
     let extracted: Array<Record<string, any>> = [];
+    let backgroundHtml = "";
+    let backgroundText = "";
     try {
       const formatted = await extractFormattedQuestionsFromPdf(buffer);
-      extracted = formatted.map((row, index) => ({
+      backgroundHtml = formatted.backgroundHtml || "";
+      backgroundText = backgroundHtml ? htmlToPlainText(backgroundHtml) : "";
+      extracted = formatted.questions.map((row, index) => ({
         number: row.number,
         question: htmlToPlainText(row.questionHtml),
         answer: htmlToPlainText(row.answerHtml),
@@ -800,8 +875,16 @@ export const processPastQuestionPaper = async (paperId: string) => {
       console.warn("[past-questions] formatted extraction failed, using plain text", error?.message || error);
     }
     if (!extracted.length) {
-      extracted = await extractQuestionsFromText(extractedText);
+      const plain = await extractQuestionsFromText(extractedText);
+      extracted = plain.questions;
+      if (!backgroundText && plain.backgroundText) {
+        backgroundText = plain.backgroundText;
+        backgroundHtml = "";
+      }
     }
+
+    applyPaperBackground(paper, backgroundHtml, backgroundText);
+    paper.title = normalizePaperTitle(paper.title) || paper.title;
 
     await PastQuestionItem.deleteMany({ paper: paper._id });
     const created =
@@ -905,6 +988,9 @@ const loadPaperPdf = async (paper: any): Promise<Buffer> => {
 
 export type ReformatResult = {
   paperId: string;
+  title?: string;
+  year?: number;
+  sitting?: string;
   total: number;
   updated: number;
   /** Question numbers the PDF read did not return. */
@@ -914,6 +1000,8 @@ export type ReformatResult = {
   /** Numbers whose solution or notes could not be matched; question HTML was still saved. */
   partial: string[];
   syncedPlain: boolean;
+  hasBackground: boolean;
+  backgroundUpdated: boolean;
 };
 
 const reformatting = new Set<string>();
@@ -937,10 +1025,11 @@ export const reformatPaperFromPdf = async (
     if (!items.length) throw new Error("This paper has no questions yet. Process it first.");
 
     const pdf = await loadPaperPdf(paper);
-    const rows = await extractFormattedQuestionsFromPdf(
+    const extraction = await extractFormattedQuestionsFromPdf(
       pdf,
       items.map((item) => ({ number: String(item.number || ""), question: String(item.question || "") }))
     );
+    const rows = extraction.questions;
 
     const queues = new Map<string, typeof rows>();
     rows.forEach((row) => {
@@ -948,14 +1037,28 @@ export const reformatPaperFromPdf = async (
       queues.set(key, [...(queues.get(key) || []), row]);
     });
 
+    const previousBackground = String(paper.backgroundHtml || paper.backgroundText || "");
+    applyPaperBackground(paper, extraction.backgroundHtml || "");
+    paper.title = normalizePaperTitle(paper.title) || paper.title;
+    const backgroundUpdated =
+      String(paper.backgroundHtml || paper.backgroundText || "") !== previousBackground;
+    if (backgroundUpdated || paper.isModified("title")) {
+      await paper.save();
+    }
+
     const result: ReformatResult = {
       paperId,
+      title: normalizePaperTitle(paper.title) || paper.title,
+      year: paper.year,
+      sitting: paper.sitting || "",
       total: items.length,
       updated: 0,
       missing: [],
       mismatched: [],
       partial: [],
       syncedPlain: Boolean(options.syncPlain),
+      hasBackground: Boolean(paper.hasBackground),
+      backgroundUpdated,
     };
     const operations: any[] = [];
     const usedRows = new Set<(typeof rows)[number]>();
@@ -1018,7 +1121,7 @@ export const reformatPaperFromPdf = async (
 
     if (operations.length) await PastQuestionItem.bulkWrite(operations);
 
-    if (options.syncPlain && result.updated) {
+    if (options.syncPlain && (result.updated || backgroundUpdated)) {
       const fresh = await PastQuestionItem.find({ paper: paper._id }).sort({ order: 1 }).lean();
       await deletePastQuestionVectors(paperId).catch(() => {});
       await upsertPaperVectors(paper, fresh);
@@ -1027,6 +1130,19 @@ export const reformatPaperFromPdf = async (
   } finally {
     reformatting.delete(paperId);
   }
+};
+
+export type ReformatIssue = {
+  paperId: string;
+  title: string;
+  year?: number;
+  sitting?: string;
+  missing: string[];
+  mismatched: string[];
+  partial: string[];
+  updated: number;
+  total: number;
+  hasBackground: boolean;
 };
 
 export type ReformatJobState = {
@@ -1040,6 +1156,8 @@ export type ReformatJobState = {
   failed: number;
   current: string | null;
   errors: Array<{ paperId: string; title: string; error: string }>;
+  /** Papers that finished with missing / mismatched / partial questions. */
+  issues: ReformatIssue[];
 };
 
 const reformatJob: ReformatJobState = {
@@ -1053,9 +1171,14 @@ const reformatJob: ReformatJobState = {
   failed: 0,
   current: null,
   errors: [],
+  issues: [],
 };
 
-export const getReformatJobState = (): ReformatJobState => ({ ...reformatJob, errors: reformatJob.errors.slice(-20) });
+export const getReformatJobState = (): ReformatJobState => ({
+  ...reformatJob,
+  errors: reformatJob.errors.slice(-40),
+  issues: reformatJob.issues.slice(-200),
+});
 
 /** Papers that still have questions without HTML. */
 export const findPapersNeedingFormat = async (): Promise<string[]> => {
@@ -1078,7 +1201,11 @@ export const startReformatJob = async (options: {
   const ids = options.paperIds?.length
     ? options.paperIds
     : options.onlyUnformatted === false
-    ? (await PastQuestionPaper.find({}).select("_id").lean()).map((paper: any) => String(paper._id))
+    ? (
+        await PastQuestionPaper.find({ fileKey: { $ne: "" } })
+          .select("_id")
+          .lean()
+      ).map((paper: any) => String(paper._id))
     : await findPapersNeedingFormat();
 
   Object.assign(reformatJob, {
@@ -1092,6 +1219,7 @@ export const startReformatJob = async (options: {
     failed: 0,
     current: null,
     errors: [],
+    issues: [],
   });
 
   const queue = [...ids];
@@ -1101,14 +1229,35 @@ export const startReformatJob = async (options: {
       while (queue.length) {
         const id = queue.shift() as string;
         const title = (await PastQuestionPaper.findById(id).select("title year sitting level").lean()) as any;
-        reformatJob.current = title ? `${title.title} · ${title.year} ${title.sitting || ""}`.trim() : id;
+        const displayTitle = normalizePaperTitle(title?.title) || title?.title || id;
+        reformatJob.current = title
+          ? `${displayTitle} · ${title.year} ${title.sitting || ""}`.trim()
+          : id;
         try {
           const result = await reformatPaperFromPdf(id, { syncPlain: options.syncPlain });
           reformatJob.updatedQuestions += result.updated;
-          if (result.missing.length || result.mismatched.length || result.partial.length) reformatJob.needsReview += 1;
+          if (result.missing.length || result.mismatched.length || result.partial.length) {
+            reformatJob.needsReview += 1;
+            reformatJob.issues.push({
+              paperId: id,
+              title: result.title || displayTitle,
+              year: result.year ?? title?.year,
+              sitting: result.sitting || title?.sitting || "",
+              missing: result.missing,
+              mismatched: result.mismatched,
+              partial: result.partial,
+              updated: result.updated,
+              total: result.total,
+              hasBackground: result.hasBackground,
+            });
+          }
         } catch (error: any) {
           reformatJob.failed += 1;
-          reformatJob.errors.push({ paperId: id, title: title?.title || id, error: error?.message || String(error) });
+          reformatJob.errors.push({
+            paperId: id,
+            title: displayTitle,
+            error: error?.message || String(error),
+          });
         } finally {
           reformatJob.done += 1;
         }
@@ -1336,12 +1485,15 @@ export const serializePaper = (paper: any, extra: Record<string, unknown> = {}) 
   year: paper.year,
   sitting: paper.sitting || "",
   level: paper.level,
-  title: paper.title,
+  title: normalizePaperTitle(paper.title) || paper.title,
   paperCode: paper.paperCode || "",
   fileKey: paper.fileKey,
   fileName: paper.fileName,
   fileUrl: paper.fileUrl || publicFileUrl(paper.fileKey),
   fileSizeMB: paper.fileSizeMB,
+  backgroundHtml: paper.backgroundHtml || "",
+  backgroundText: paper.backgroundText || "",
+  hasBackground: Boolean(paper.hasBackground),
   status: paper.status,
   processStatus: paper.processStatus,
   questionCount: paper.questionCount,
@@ -1601,8 +1753,10 @@ export const getPastQuestionContext = async (params: {
 }) => {
   const parts: string[] = [];
   if (params.scope === "question" && params.item) {
+    const background = String(params.paper?.backgroundText || "").trim();
     parts.push(
       [
+        background ? `Case study / pre-seen material:\n${background}` : "",
         `Past question ${params.item.number || ""}`.trim(),
         params.item.question,
         params.item.answer ? `Suggested solution:\n${params.item.answer}` : "",

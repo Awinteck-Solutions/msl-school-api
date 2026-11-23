@@ -3,12 +3,12 @@ import mongoose from "mongoose";
 import {
   applySuccessfulInvoicePayment,
   findOpenSubscription,
-  getOrCreateSubscriptionPlan,
   getRawBodyString,
   hasActiveCourseEnrollment,
   initializeInvoicePayment,
   isSubscriptionAccessActive,
-  publicPlanPayload,
+  listSubscriptionPlans,
+  publicCatalogPayload,
   serializeSubscription,
   startSubscriptionCheckout,
   verifyPaystackReference,
@@ -23,15 +23,16 @@ import SubscriptionInvoice from "../schema/subscriptionInvoice.schema";
 import Subscription from "../schema/subscription.schema";
 import SubscriptionResource from "../schema/subscriptionResource.schema";
 import SubscriptionResourceFile from "../schema/subscriptionResourceFile.schema";
+import { hydrateSubscriptionResources } from "../subscriptionResourceLesson.service";
 
 export class SubscriptionV2Controller {
   static async plan(req: Request, res: Response) {
     try {
-      const plan = await getOrCreateSubscriptionPlan();
+      const plans = await listSubscriptionPlans();
       return res.status(200).json({
         status: true,
         message: "Subscription plan fetched",
-        response: publicPlanPayload(plan),
+        response: publicCatalogPayload(plans),
       });
     } catch (error: any) {
       return res.status(500).json({
@@ -57,19 +58,8 @@ export class SubscriptionV2Controller {
           .lean(),
         SubscriptionResource.countDocuments(filter),
       ]);
-      const files = await SubscriptionResourceFile.find({
-        resource: { $in: items.map((item: any) => item._id) },
-      })
-        .sort({ createdAt: -1 })
-        .lean();
-      const filesByResource = new Map<string, any[]>();
-      for (const file of files) {
-        const key = String(file.resource);
-        const list = filesByResource.get(key) || [];
-        list.push(file);
-        filesByResource.set(key, list);
-      }
       const totalPages = Math.ceil(total / limit);
+      const response = await hydrateSubscriptionResources(items);
       return res.status(200).json({
         status: true,
         message: "Subscription resources fetched",
@@ -81,15 +71,42 @@ export class SubscriptionV2Controller {
           hasNextPage: page < totalPages,
           hasPrevPage: page > 1,
         },
-        response: items.map((item: any) => ({
-          ...item,
-          files: filesByResource.get(String(item._id)) || [],
-        })),
+        response,
       });
     } catch (error: any) {
       return res.status(500).json({
         status: false,
         message: "Failed to fetch resources",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  static async resource(req: Request, res: Response) {
+    try {
+      const { id } = req.params as { id?: string };
+      if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ status: false, message: "Invalid resource id" });
+      }
+      const resource = await SubscriptionResource.findOne({
+        _id: id,
+        status: SubscriptionContentStatus.ACTIVE,
+      })
+        .populate({ path: "categoryId", select: "name status" })
+        .lean();
+      if (!resource) {
+        return res.status(404).json({ status: false, message: "Resource not found" });
+      }
+      const [hydrated] = await hydrateSubscriptionResources([resource]);
+      return res.status(200).json({
+        status: true,
+        message: "Subscription resource fetched",
+        response: hydrated,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to fetch resource",
         error: error?.message || error,
       });
     }
@@ -142,9 +159,13 @@ export class SubscriptionV2Controller {
         return res.status(401).json({ status: false, message: "Unauthorized" });
       }
 
+      const planId = String(
+        req.body?.planId || req.body?.code || req.body?.planCode || ""
+      ).trim();
       const result = await startSubscriptionCheckout({
         userId: currentUser.id,
         email: currentUser.email,
+        planId: planId || undefined,
       });
 
       return res.status(200).json({

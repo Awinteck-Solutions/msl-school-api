@@ -28,6 +28,11 @@ const subscriptionSchema = new Schema(
       ref: "SubscriptionInvoice",
       default: null,
     },
+    planId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SubscriptionPlan",
+      default: null,
+    },
   },
   { timestamps: true }
 );

@@ -3,6 +3,7 @@ import getRandomInt from "../../../helpers/random";
 import GenerateModel from "../schema/windows.schema";
 import UserModel from "../../user/schema/user.schema";
 import { encrypt } from "../../../helpers/tokenizer";
+import { loginAccessSnapshot } from "../../subscription/controllers/subscription.service";
 
 export class WindowsV2Controller {
   static async generateCode(req: Request, res: Response) {
@@ -128,8 +129,7 @@ export class WindowsV2Controller {
       .then((result) => {
         if (result !== null) {
           UserModel.findOne({ _id: result.user_id })
-            .then((value) => {
-              // generate token
+            .then(async (value) => {
               const token = encrypt.generateToken({
                 id: value._id,
                 email: value.email,
@@ -138,10 +138,12 @@ export class WindowsV2Controller {
                 role: value.role,
                 status: value.status,
               });
+              const access = await loginAccessSnapshot(String(value._id), value.email);
               return res.status(200).json({
                 status: true,
                 message: "Login success",
-                response: {...value.toObject(), token},
+                ...access,
+                response: {...value.toObject(), token, ...access},
               });
             })
             .catch(() => {

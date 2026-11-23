@@ -5,6 +5,7 @@ import { authentification } from "../../../middlewares/authentication.middleware
 import { authorization } from "../../../middlewares/authorization.middleware";
 import { Roles } from "../../../enums/roles.enum";
 import { AdminSubscriptionV2Controller } from "../controllers/admin.subscription.v2.controller";
+import { AdminSubscriptionLessonController } from "../controllers/admin.subscription.lesson.controller";
 import { upload } from "../../../helpers/uploader";
 
 const Router = express.Router();
@@ -45,6 +46,33 @@ Router.put(
   }
 );
 
+Router.post(
+  "/plans",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionV2Controller.createPlan(req, res);
+  }
+);
+
+Router.put(
+  "/plans/:planId",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionV2Controller.updatePlanModel(req, res);
+  }
+);
+
+Router.delete(
+  "/plans/:planId",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionV2Controller.deletePlanModel(req, res);
+  }
+);
+
 Router.get(
   "/",
   authentification,
@@ -63,12 +91,48 @@ Router.post(
   }
 );
 
+Router.post(
+  "/:id/revoke",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionV2Controller.revokeSubscription(req, res);
+  }
+);
+
+Router.post(
+  "/:id/end",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionV2Controller.endSubscription(req, res);
+  }
+);
+
 Router.get(
   "/invoices",
   authentification,
   authorization([Roles.ADMIN]),
   (req: Request, res: Response) => {
     AdminSubscriptionV2Controller.listInvoices(req, res);
+  }
+);
+
+Router.post(
+  "/resources/migrate-legacy-lessons",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionLessonController.migrateLegacyFiles(req, res);
+  }
+);
+
+Router.post(
+  "/resources/clone-from-course",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionLessonController.cloneFromCourse(req, res);
   }
 );
 
@@ -180,6 +244,61 @@ Router.delete(
   authorization([Roles.ADMIN]),
   (req: Request, res: Response) => {
     AdminSubscriptionV2Controller.deleteResource(req, res);
+  }
+);
+
+Router.get(
+  "/resources/:id/lessons",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionLessonController.listLessons(req, res);
+  }
+);
+
+Router.post(
+  "/resources/:id/lessons",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionLessonController.createLesson(req, res);
+  }
+);
+
+Router.patch(
+  "/resources/:id/lessons/:lessonId",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionLessonController.updateLesson(req, res);
+  }
+);
+
+Router.delete(
+  "/resources/:id/lessons/:lessonId",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionLessonController.deleteLesson(req, res);
+  }
+);
+
+Router.post(
+  "/resources/:id/lessons/:lessonId/upload",
+  authentification,
+  authorization([Roles.ADMIN]),
+  upload.single("upload"),
+  (req: Request, res: Response) => {
+    AdminSubscriptionLessonController.uploadLessonMedia(req, res);
+  }
+);
+
+Router.post(
+  "/resources/:id/sync-lesson-files",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AdminSubscriptionLessonController.syncResourceFiles(req, res);
   }
 );
 

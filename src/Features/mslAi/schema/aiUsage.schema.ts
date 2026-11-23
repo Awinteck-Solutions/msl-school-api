@@ -48,6 +48,8 @@ aiUsageSchema.index({ student: 1, source: 1, createdAt: -1 });
 aiUsageSchema.index({ source: 1, createdAt: -1 });
 // Admin monthly usage: range-scan createdAt and group by student without fetching question/answer.
 aiUsageSchema.index({ createdAt: 1, student: 1 });
+// Course AI admin list. source is first so a course-only month stays on the index.
+aiUsageSchema.index({ source: 1, createdAt: 1, student: 1 });
 
 const AiUsage = mongoose.model("AiUsage", aiUsageSchema);
 

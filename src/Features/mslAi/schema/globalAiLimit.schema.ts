@@ -27,6 +27,11 @@ const globalAiLimitSchema = new Schema(
       type: String,
       default: "system",
     },
+    pastQuestionLifetimeLimit: {
+      type: Number,
+      default: 10,
+      min: 1,
+    },
   },
   { timestamps: true }
 );

@@ -4,6 +4,7 @@ import getRandomInt from "../../../helpers/random";
 import {sendMail} from "../../../helpers/emailer";
 import User from "../schema/user.schema";
 import {Status} from "../../../enums/status.enum";
+import { loginAccessSnapshot } from "../../subscription/controllers/subscription.service";
 import multer from "multer";
 
 interface MulterRequest extends Request {
@@ -44,11 +45,13 @@ export class UserV2Controller {
         status: user.status,
         timezone: user.timezone,
       });
+      const access = await loginAccessSnapshot(String(user._id), user.email);
 
       return res.status(200).json({
         status: true,
         message: "Token refreshed",
-        user: { id: user._id, email: user.email, firstname: user.firstname, lastname: user.lastname, role: user.role, status: user.status, token },
+        ...access,
+        user: { id: user._id, email: user.email, firstname: user.firstname, lastname: user.lastname, role: user.role, status: user.status, token, ...access },
       });
     } catch (error) {
       return res.status(500).json({
@@ -120,6 +123,7 @@ export class UserV2Controller {
             firebase_token: existing.firebase_token,
             device_id: existing.device_id,
           });
+          const access = await loginAccessSnapshot(String(existing._id), existing.email);
 
           return res.status(200).json({
             status: true,
@@ -127,7 +131,8 @@ export class UserV2Controller {
               existing.device_id !== device_id
                 ? "You were logged out of previous device"
                 : "Login success(apple)",
-            user: { ...existing.toObject(), token },
+            ...access,
+            user: { ...existing.toObject(), token, ...access },
           });
         }
 
@@ -154,11 +159,13 @@ export class UserV2Controller {
           firebase_token: created.firebase_token,
           device_id: created.device_id,
         });
+        const access = await loginAccessSnapshot(String(created._id), created.email);
 
         return res.status(200).json({
           status: true,
           message: "User created(apple)",
-          user: { ...created.toObject(), token },
+          ...access,
+          user: { ...created.toObject(), token, ...access },
         });
       }
 
@@ -203,6 +210,7 @@ export class UserV2Controller {
           firebase_token: result.firebase_token,
           device_id: result.device_id,
         });
+        const access = await loginAccessSnapshot(String(result._id), result.email);
 
         return res.status(200).json({
           status: true,
@@ -210,7 +218,8 @@ export class UserV2Controller {
             result?.device_id !== device_id
               ? "You were logged out of previous device"
               : "Login success(google)",
-          user: { ...result.toObject(), token },
+          ...access,
+          user: { ...result.toObject(), token, ...access },
         });
       }
 

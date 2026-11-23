@@ -7,6 +7,7 @@ import { authorization } from "../../../middlewares/authorization.middleware";
 import { requireActiveCourseEnrollment } from "../../../middlewares/requireCourseEnrollment.middleware";
 import { Roles } from "../../../enums/roles.enum";
 import { GeminiAiV2Controller } from "../controllers/geminiAi.v2.controller";
+import { AiVoiceController } from "../controllers/aiVoice.controller";
 
 const Router = express.Router();
 
@@ -15,6 +16,10 @@ Router.use(
   authorization([Roles.USER, Roles.ADMIN]),
   requireActiveCourseEnrollment
 );
+
+Router.get("/voices", (req: Request, res: Response) => {
+  AiVoiceController.listEnabled(req, res);
+});
 
 // 
 const chatLimiter = rateLimit({
@@ -180,6 +185,10 @@ Router.get("/history", (req: Request, res: Response) => {
 
 Router.get("/recent-activity", (req: Request, res: Response) => {
   GeminiAiV2Controller.nonChatHistory(req, res);
+});
+
+Router.get("/generation-status", (req: Request, res: Response) => {
+  GeminiAiV2Controller.generationStatus(req, res);
 });
 
 Router.get("/summaries", (req: Request, res: Response) => {

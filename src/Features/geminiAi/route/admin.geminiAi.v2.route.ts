@@ -6,6 +6,7 @@ import { authentification } from "../../../middlewares/authentication.middleware
 import { authorization } from "../../../middlewares/authorization.middleware";
 import { Roles } from "../../../enums/roles.enum";
 import { AdminGeminiAiV2Controller } from "../controllers/admin.geminiAi.v2.controller";
+import { AiVoiceController } from "../controllers/aiVoice.controller";
 
 const Router = express.Router();
 
@@ -28,6 +29,60 @@ const upload = multer({
     }
   },
 });
+
+const voiceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024 },
+});
+
+Router.get(
+  "/voices",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AiVoiceController.list(req, res);
+  }
+);
+
+Router.post(
+  "/voices/prebuilt",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AiVoiceController.createPrebuilt(req, res);
+  }
+);
+
+Router.post(
+  "/voices/replicate",
+  authentification,
+  authorization([Roles.ADMIN]),
+  voiceUpload.fields([
+    { name: "source", maxCount: 1 },
+    { name: "consent", maxCount: 1 },
+  ]),
+  (req: Request, res: Response) => {
+    AiVoiceController.createReplicated(req, res);
+  }
+);
+
+Router.patch(
+  "/voices/:id",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AiVoiceController.update(req, res);
+  }
+);
+
+Router.delete(
+  "/voices/:id",
+  authentification,
+  authorization([Roles.ADMIN]),
+  (req: Request, res: Response) => {
+    AiVoiceController.remove(req, res);
+  }
+);
 
 Router.get(
   "/list-pdfs",

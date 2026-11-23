@@ -13,6 +13,8 @@ import {
 import PastQuestionInsight from "../schema/pastQuestionInsight.schema";
 import PastQuestionItem from "../schema/pastQuestionItem.schema";
 import PastQuestionPaper from "../schema/pastQuestionPaper.schema";
+import { pastQuestionAiLifetimeLimit } from "./pastQuestion.v2.controller";
+import GlobalAiLimit from "../../mslAi/schema/globalAiLimit.schema";
 import {
   buildBrowseTree,
   buildPastQuestionAnalytics,
@@ -24,8 +26,10 @@ import {
   startReformatJob,
   publicFileUrl,
   replacePaperQuestions,
+  normalizePaperTitle,
   serializePaper,
 } from "./pastQuestion.service";
+import { htmlToPlainText, sanitizeQuestionHtml } from "./pastQuestionFormat";
 
 interface MulterRequest extends Request {
   file?: multer.File;
@@ -34,6 +38,71 @@ interface MulterRequest extends Request {
 const processing = new Set<string>();
 
 export class AdminPastQuestionV2Controller {
+  static async getAiLimit(_req: Request, res: Response) {
+    try {
+      const lifetimeLimit = await pastQuestionAiLifetimeLimit();
+      const doc = await GlobalAiLimit.findOne({}).lean();
+      return res.status(200).json({
+        status: true,
+        message: "Past question AI limit fetched",
+        response: {
+          lifetimeLimit,
+          updatedAt: (doc as any)?.updatedAt,
+          updatedBy: (doc as any)?.updatedBy,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to fetch past question AI limit",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  static async updateAiLimit(req: Request, res: Response) {
+    try {
+      const lifetimeLimit = Number(req.body?.lifetimeLimit);
+      if (!Number.isInteger(lifetimeLimit) || lifetimeLimit < 1) {
+        return res.status(400).json({
+          status: false,
+          message: "lifetimeLimit must be a whole number of at least 1",
+        });
+      }
+      const currentUser = req["currentUser"] as { email?: string } | undefined;
+      const doc = await GlobalAiLimit.findOneAndUpdate(
+        {},
+        {
+          $set: {
+            pastQuestionLifetimeLimit: lifetimeLimit,
+            updatedBy: currentUser?.email || "admin",
+          },
+          $setOnInsert: {
+            dailyLimit: 10,
+            monthlyLimit: 100,
+            description: "Default global AI limits",
+          },
+        },
+        { upsert: true, new: true }
+      );
+      return res.status(200).json({
+        status: true,
+        message: "Past question AI limit updated",
+        response: {
+          lifetimeLimit: doc.pastQuestionLifetimeLimit,
+          updatedAt: doc.updatedAt,
+          updatedBy: doc.updatedBy,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to update past question AI limit",
+        error: error?.message || error,
+      });
+    }
+  }
+
   static async create(req: MulterRequest, res: Response) {
     try {
       const {
@@ -82,7 +151,7 @@ export class AdminPastQuestionV2Controller {
         year: Number(year),
         sitting: sitting || "",
         level: String(level).trim(),
-        title: title.trim(),
+        title: normalizePaperTitle(title) || title.trim(),
         paperCode: (paperCode || "").trim(),
         fileKey: uploaded.key,
         fileName: file.originalname,
@@ -208,7 +277,9 @@ export class AdminPastQuestionV2Controller {
       if (!paper) {
         return res.status(404).json({ status: false, message: "Paper not found" });
       }
-      if (body.title !== undefined) paper.title = String(body.title).trim();
+      if (body.title !== undefined) {
+        paper.title = normalizePaperTitle(body.title) || String(body.title).trim();
+      }
       if (body.paperCode !== undefined) paper.paperCode = String(body.paperCode).trim();
       if (body.sitting !== undefined) paper.sitting = String(body.sitting).trim();
       if (body.level !== undefined) paper.level = String(body.level).trim();
@@ -218,6 +289,19 @@ export class AdminPastQuestionV2Controller {
       }
       if (body.status === PastQuestionStatus.ACTIVE || body.status === PastQuestionStatus.DEACTIVE) {
         paper.status = body.status;
+      }
+      if (body.backgroundHtml !== undefined || body.backgroundText !== undefined) {
+        const html = sanitizeQuestionHtml(body.backgroundHtml);
+        const text = String(
+          body.backgroundText !== undefined
+            ? body.backgroundText
+            : html
+            ? htmlToPlainText(html)
+            : ""
+        ).trim();
+        paper.backgroundHtml = html;
+        paper.backgroundText = text;
+        paper.hasBackground = Boolean(html || text);
       }
       await paper.save();
       return res.status(200).json({

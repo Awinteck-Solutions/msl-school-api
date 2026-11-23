@@ -8,6 +8,7 @@ import {
   buildSearchVector,
   callGeminiAudioTranscription,
   callGeminiTts,
+  resolveCachedTtsVoice,
   checkAiLimits,
   embedText,
   ensurePayloadIndexesForGeminiCollection,
@@ -21,6 +22,8 @@ import {
 } from "./geminiAi.shared";
 import AiUsage from "../../mslAi/schema/aiUsage.schema";
 import { recordStudentActivity } from "../../gamification/service/gamification.service";
+import { enqueueGeneration, generationStatus as readGenerationStatus } from "../generationJob.service";
+import { resolveTtsVoice } from "./aiVoice.service";
 
 interface MulterRequest extends Request {
   file?: {
@@ -98,13 +101,19 @@ const toWavChunks = (
 
   return chunks;
 };
-const findLastBoundaryIndex = (text: string) => {
-  const boundaryRegex = /[\.,!\?\;:\)\]\}]/;
+const findLastBoundaryIndex = (text: string, minChars = 48) => {
+  if (String(text || "").trim().length < minChars) return -1;
+  // Prefer sentence ends so TTS starts on a usable phrase, not every comma.
+  const sentence = /[.!?…](?=\s|$)/g;
   let lastIndex = -1;
-  for (let i = 0; i < text.length; i += 1) {
-    if (boundaryRegex.test(text[i])) {
-      lastIndex = i;
-    }
+  let match: RegExpExecArray | null;
+  while ((match = sentence.exec(text)) !== null) {
+    lastIndex = match.index;
+  }
+  if (lastIndex >= 0) return lastIndex;
+  const soft = /[,;:](?=\s|$)/g;
+  while ((match = soft.exec(text)) !== null) {
+    lastIndex = match.index;
   }
   return lastIndex;
 };
@@ -148,6 +157,7 @@ type LiveSetupMessage = {
     };
     speechConfig?: {
       voiceConfig?: {
+        voice?: string;
         prebuiltVoiceConfig?: { voiceName?: string };
       };
     };
@@ -1170,7 +1180,38 @@ export class GeminiAiV2Controller {
     }
   }
 
-  static async summarize(req: Request, res: Response) {
+  static generationStatus(req: Request, res: Response) {
+    return readGenerationStatus(req, res, "course");
+  }
+
+  static summarize(req: Request, res: Response) {
+    return enqueueGeneration(
+      req,
+      res,
+      { source: "course", queryType: "summarize", label: "Summary" },
+      (jobReq, jobRes) => GeminiAiV2Controller.runSummarize(jobReq, jobRes)
+    );
+  }
+
+  static generateFlashcards(req: Request, res: Response) {
+    return enqueueGeneration(
+      req,
+      res,
+      { source: "course", queryType: "generate-flashcards", label: "Flashcards" },
+      (jobReq, jobRes) => GeminiAiV2Controller.runGenerateFlashcards(jobReq, jobRes)
+    );
+  }
+
+  static generateQuiz(req: Request, res: Response) {
+    return enqueueGeneration(
+      req,
+      res,
+      { source: "course", queryType: "generate-quiz", label: "Quiz" },
+      (jobReq, jobRes) => GeminiAiV2Controller.runGenerateQuiz(jobReq, jobRes)
+    );
+  }
+
+  static async runSummarize(req: Request, res: Response) {
     try {
       const { s3Keys, courseId, lessonId } = req.body;
       const { id } = req['currentUser'];
@@ -1279,7 +1320,7 @@ export class GeminiAiV2Controller {
     }
   }
 
-  static async generateFlashcards(req: Request, res: Response) {
+  static async runGenerateFlashcards(req: Request, res: Response) {
     try {
       const {
         s3Keys,
@@ -1409,7 +1450,7 @@ export class GeminiAiV2Controller {
     }
   }
 
-  static async generateQuiz(req: Request, res: Response) {
+  static async runGenerateQuiz(req: Request, res: Response) {
     try {
       const {
         s3Keys,
@@ -1916,7 +1957,7 @@ export class GeminiAiV2Controller {
   static async queryGeneralWithContextAudioStream(req: Request, res: Response) {
     try {
       const { id } = req["currentUser"] as { id?: string };
-      const { question, s3Keys, courseId, lessonId, voiceName } = req.body;
+      const { question, s3Keys, courseId, lessonId, voiceName, voiceId } = req.body;
 
       if (!question) {
         return res.status(400).json({
@@ -2089,6 +2130,7 @@ export class GeminiAiV2Controller {
       const { dataBase64, mimeType } = await callGeminiTts({
         text: fullAnswer,
         voiceName: voiceName || undefined,
+        voiceId: voiceId || undefined,
       });
 
       const wavChunks = toWavChunks(dataBase64, mimeType, 32000);
@@ -2161,7 +2203,7 @@ export class GeminiAiV2Controller {
   static async queryGeneralWithContextAudioBinary(req: Request, res: Response) {
     try {
       const { id } = req["currentUser"] as { id?: string };
-      const { question, s3Keys, courseId, lessonId, voiceName } = req.body;
+      const { question, s3Keys, courseId, lessonId, voiceName, voiceId } = req.body;
 
       if (!question) {
         return res.status(400).json({
@@ -2273,6 +2315,7 @@ export class GeminiAiV2Controller {
       const { dataBase64, mimeType } = await callGeminiTts({
         text: fullAnswer,
         voiceName: voiceName || undefined,
+        voiceId: voiceId || undefined,
       });
 
       const wavChunks = toWavChunks(dataBase64, mimeType, Number.MAX_SAFE_INTEGER);
@@ -2348,7 +2391,7 @@ export class GeminiAiV2Controller {
   ) {
     try {
       const { id } = req["currentUser"] as { id?: string };
-      const { question, s3Keys, courseId, lessonId, voiceName } = req.body;
+      const { question, s3Keys, courseId, lessonId, voiceName, voiceId } = req.body;
 
       if (!question) {
         return res.status(400).json({
@@ -2474,6 +2517,11 @@ export class GeminiAiV2Controller {
       let pendingText = "";
       const wavMime = GEMINI_LIVE_AUDIO_MIME;
       const wavSampleRate = parseAudioMimeSampleRate(wavMime);
+      const resolvedVoice = await resolveTtsVoice(voiceId, voiceName);
+      const liveVoiceConfig =
+        resolvedVoice.startsWith("voice_") || resolvedVoice.startsWith("voicekey_")
+          ? { voice: resolvedVoice }
+          : { prebuiltVoiceConfig: { voiceName: resolvedVoice } };
 
       const waitForLiveReady = new Promise<void>((resolve, reject) => {
         liveSocket.on("open", () => {
@@ -2485,11 +2533,7 @@ export class GeminiAiV2Controller {
               },
               outputAudioFormat: { mimeType: wavMime },
               speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName: voiceName || undefined,
-                  },
-                },
+                voiceConfig: liveVoiceConfig,
               },
             },
           };
@@ -2665,7 +2709,7 @@ export class GeminiAiV2Controller {
   ) {
     try {
       const { id } = req["currentUser"] as { id?: string };
-      const { question, s3Keys, courseId, lessonId, voiceName } = req.body;
+      const { question, s3Keys, courseId, lessonId, voiceName, voiceId } = req.body;
 
       if (!question) {
         return res.status(400).json({
@@ -2769,6 +2813,11 @@ export class GeminiAiV2Controller {
         historyText || "No prior chat history."
       );
 
+      const resolvedVoice = await resolveCachedTtsVoice(
+        voiceId || undefined,
+        voiceName || undefined
+      );
+
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -2826,6 +2875,47 @@ export class GeminiAiV2Controller {
         }
       };
 
+      /** TTS only — live text is streamed separately as model tokens arrive. */
+      const emitTtsChunk = (emitText: string) => {
+        const spoken = String(emitText || "").trim();
+        if (!spoken) return;
+        const currentIndex = chunkIndex++;
+        pendingAudio += 1;
+        callGeminiTts({
+          text: spoken,
+          voice: resolvedVoice,
+        })
+          .then(({ dataBase64, mimeType }) => {
+            // One WAV per phrase — avoids splice clicks from tiny PCM slices.
+            const wavChunks = toWavChunks(
+              dataBase64,
+              mimeType,
+              Number.MAX_SAFE_INTEGER
+            );
+            res.write(
+              `event: audio\ndata: ${JSON.stringify({
+                chunkIndex: currentIndex,
+                audio: wavChunks[0] || "",
+                mimeType: "audio/wav",
+                isFinal: true,
+              })}\n\n`
+            );
+          })
+          .catch((error: any) => {
+            res.write(
+              `event: error\ndata: ${JSON.stringify({
+                message: "TTS failed",
+                error: error.message,
+                chunkIndex: currentIndex,
+              })}\n\n`
+            );
+          })
+          .finally(() => {
+            pendingAudio -= 1;
+            void maybeEnd();
+          });
+      };
+
       try {
         for await (const chunk of streamResult.stream) {
           const content = removeAsterisks(chunk.text());
@@ -2833,6 +2923,14 @@ export class GeminiAiV2Controller {
 
           fullAnswer += content;
           pendingText += content;
+          // Fine-grained text for letter-by-letter UI while audio is still compiling.
+          res.write(
+            `event: text\ndata: ${JSON.stringify({
+              text: content,
+              isFinal: false,
+            })}\n\n`
+          );
+
           const boundaryIndex = findLastBoundaryIndex(pendingText);
           if (boundaryIndex < 0) {
             continue;
@@ -2840,48 +2938,7 @@ export class GeminiAiV2Controller {
 
           const emitText = pendingText.slice(0, boundaryIndex + 1);
           pendingText = pendingText.slice(boundaryIndex + 1);
-          const currentIndex = chunkIndex++;
-
-          res.write(
-            `event: text\ndata: ${JSON.stringify({
-              text: emitText,
-              isFinal: false,
-              chunkIndex: currentIndex,
-            })}\n\n`
-          );
-
-          pendingAudio += 1;
-          callGeminiTts({
-            text: emitText,
-            voiceName: voiceName || undefined,
-          })
-            .then(({ dataBase64, mimeType }) => {
-              const wavChunks = toWavChunks(dataBase64, mimeType, 32000);
-              for (let i = 0; i < wavChunks.length; i += 1) {
-                res.write(
-                  `event: audio\ndata: ${JSON.stringify({
-                    chunkIndex: currentIndex,
-                    audio: wavChunks[i],
-                    mimeType: "audio/wav",
-                    isFinal: i + 1 >= wavChunks.length,
-                  })}\n\n`
-                );
-              }
-            })
-            .catch((error: any) => {
-              console.log('error', error)
-              res.write(
-                `event: error\ndata: ${JSON.stringify({
-                  message: "TTS failed",
-                  error: error.message,
-                  chunkIndex: currentIndex,
-                })}\n\n`
-              );
-            })
-            .finally(() => {
-              pendingAudio -= 1;
-              void maybeEnd();
-            });
+          emitTtsChunk(emitText);
         }
       } catch (streamError: any) {
         if (res.headersSent) {
@@ -2903,45 +2960,8 @@ export class GeminiAiV2Controller {
       }
 
       if (pendingText.trim().length > 0) {
-        const currentIndex = chunkIndex++;
-        res.write(
-          `event: text\ndata: ${JSON.stringify({
-            text: pendingText,
-            isFinal: false,
-            chunkIndex: currentIndex,
-          })}\n\n`
-        );
-        pendingAudio += 1;
-        callGeminiTts({
-          text: pendingText,
-          voiceName: voiceName || undefined,
-        })
-          .then(({ dataBase64, mimeType }) => {
-            const wavChunks = toWavChunks(dataBase64, mimeType, 32000);
-            for (let i = 0; i < wavChunks.length; i += 1) {
-              res.write(
-                `event: audio\ndata: ${JSON.stringify({
-                  audio: wavChunks[i],
-                  mimeType: "audio/wav",
-                  chunkIndex: currentIndex,
-                  isFinal: i + 1 >= wavChunks.length,
-                })}\n\n`
-              );
-            }
-          })
-          .catch((error: any) => {
-            res.write(
-              `event: error\ndata: ${JSON.stringify({
-                message: "TTS failed",
-                error: error.message,
-                chunkIndex: currentIndex,
-              })}\n\n`
-            );
-          })
-          .finally(() => {
-            pendingAudio -= 1;
-            void maybeEnd();
-          });
+        emitTtsChunk(pendingText);
+        pendingText = "";
       }
 
       res.write(
@@ -3006,7 +3026,7 @@ export class GeminiAiV2Controller {
       };
 
       const { id } = req["currentUser"] as { id?: string };
-      const { question, s3Keys, courseId, lessonId, voiceName } = req.body;
+      const { question, s3Keys, courseId, lessonId, voiceName, voiceId } = req.body;
 
       logTiming("request_received", "info", {
         hasQuestion: Boolean(question),
@@ -3245,6 +3265,7 @@ export class GeminiAiV2Controller {
       const { dataBase64, mimeType } = await callGeminiTts({
         text: fullAnswer,
         voiceName: voiceName || undefined,
+        voiceId: voiceId || undefined,
       });
       endStep("tts_audio_generation", {
         mimeType,

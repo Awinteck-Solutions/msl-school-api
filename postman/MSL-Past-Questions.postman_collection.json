@@ -2,17 +2,42 @@
   "info": {
     "_postman_id": "msl-past-questions-v2",
     "name": "MSL Past Questions",
-    "description": "Student and admin past-question APIs.\n\nBase path: {{baseUrl}}/v2. Set baseUrl to the API origin with no trailing slash (local default in the main MSL collection is http://localhost:4000).\n\nEvery request needs:\n- Authorization: Bearer {{token}}\n- x-device-id: {{deviceId}} — required. Must match the signed-in user's stored device_id, or the API returns 403 \"You've been logged out\".\n- x-timezone: {{timezone}} — optional. Sent by the app and recorded with student activity. Defaults to UTC.\n\nStudent routes allow USER and ADMIN, and also require an active course enrollment or an active AI subscription. Admin routes allow ADMIN only.\n\nChat is limited to 10 requests per minute.",
+    "description": "Student and admin past-question APIs (updated Nov 2026).\n\nBase path: {{baseUrl}}/v2. Set baseUrl to the API origin with no trailing slash (local default http://localhost:4000).\n\nEvery request needs:\n- Authorization: Bearer {{token}}\n- x-device-id: {{deviceId}} — required. Must match the signed-in user's stored device_id, or the API returns 403 \"You've been logged out\".\n- x-timezone: {{timezone}} — optional. Sent by the app and recorded with student activity. Defaults to UTC.\n\nStudent routes allow USER and ADMIN, and also require an active course enrollment or an active AI subscription. Admin routes allow ADMIN only.\n\nChat is limited to 10 requests per minute. Spoken replies: POST /v2/past-questions/chat-audio-stream (SSE).\nAdmin reformat/verify: POST /reformat-all then GET /reformat-status (issues[]).\nPapers expose backgroundHtml / backgroundText / hasBackground for pre-seen material.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:4000" },
-    { "key": "token", "value": "" },
-    { "key": "deviceId", "value": "" },
-    { "key": "timezone", "value": "UTC" },
-    { "key": "categoryId", "value": "" },
-    { "key": "pastQuestionPaperId", "value": "" },
-    { "key": "pastQuestionItemId", "value": "" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "deviceId",
+      "value": ""
+    },
+    {
+      "key": "timezone",
+      "value": "UTC"
+    },
+    {
+      "key": "categoryId",
+      "value": ""
+    },
+    {
+      "key": "pastQuestionPaperId",
+      "value": ""
+    },
+    {
+      "key": "pastQuestionItemId",
+      "value": ""
+    },
+    {
+      "key": "voiceId",
+      "value": ""
+    }
   ],
   "item": [
     {
@@ -24,9 +49,21 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}", "description": "Admin JWT." },
-              { "key": "x-device-id", "value": "{{deviceId}}", "description": "Required. Must match the admin user's device_id." },
-              { "key": "x-timezone", "value": "{{timezone}}", "description": "Optional. IANA timezone, for example Africa/Accra." }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Admin JWT."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the admin user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone, for example Africa/Accra."
+              }
             ],
             "body": {
               "mode": "formdata",
@@ -77,8 +114,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/v2/admin/past-questions",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "admin", "past-questions"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions"
+              ]
             },
             "description": "Uploads a PDF and starts extraction. Do not set Content-Type; Postman adds the multipart boundary.\n\nRequired form fields: file, categoryId, year, level, title.\nOptional form fields: sitting, paperCode.\n\nReturns 201. Extraction continues in the background."
           }
@@ -88,14 +131,29 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/admin/past-questions?categoryId={{categoryId}}&year=&level=&processStatus=",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "admin", "past-questions"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions"
+              ],
               "query": [
                 {
                   "key": "categoryId",
@@ -127,14 +185,31 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/admin/past-questions/insights/analytics?categoryId={{categoryId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "admin", "past-questions", "insights", "analytics"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "insights",
+                "analytics"
+              ],
               "query": [
                 {
                   "key": "categoryId",
@@ -151,14 +226,30 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}"
+              ],
               "variable": [
                 {
                   "key": "pastQuestionPaperId",
@@ -171,26 +262,53 @@
           }
         },
         {
-          "name": "Update metadata",
+          "name": "Update metadata (incl. background)",
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body."
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"title\": \"FINANCIAL REPORTING\",\n  \"paperCode\": \"2.1\",\n  \"sitting\": \"July\",\n  \"level\": \"2\",\n  \"year\": 2026,\n  \"status\": \"ACTIVE\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"title\": \"Advanced Taxation\",\n  \"paperCode\": \"3.3\",\n  \"sitting\": \"July\",\n  \"level\": \"3\",\n  \"year\": 2026,\n  \"status\": \"ACTIVE\",\n  \"backgroundHtml\": \"<p>Case study / pre-seen material that appears before Question 1.</p>\",\n  \"backgroundText\": \"Case study / pre-seen material that appears before Question 1.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}"
+              ]
             },
-            "description": "Partial update. Only fields you send are changed.\n\nBody fields, all optional:\n- categoryId: ObjectId. Ignored when it is not a valid id.\n- title: string\n- paperCode: string\n- sitting: string\n- level: string\n- year: number\n- status: ACTIVE or DEACTIVE. Any other value is ignored."
+            "description": "Partial update. Only fields you send are changed. Trailing “Paper” / “Solutions” is stripped from title.\n\nBody fields, all optional:\n- categoryId, title, paperCode, sitting, level, year\n- status: ACTIVE or DEACTIVE\n- backgroundHtml: sanitized HTML for case-study / pre-seen material before Q1\n- backgroundText: plain companion text (derived from HTML when omitted)\n\nSets hasBackground when either background field is non-empty."
           }
         },
         {
@@ -198,20 +316,44 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"questions\": [\n    {\n      \"number\": \"1\",\n      \"question\": \"Discuss the recognition criteria for revenue.\",\n      \"answer\": \"Suggested solution...\",\n      \"answerNotes\": \"Candidates lost marks for omitting the control criteria.\",\n      \"marks\": 20\n    },\n    {\n      \"number\": \"2a\",\n      \"question\": \"Prepare the statement of profit or loss.\",\n      \"answer\": \"\",\n      \"answerNotes\": \"\",\n      \"marks\": null\n    }\n  ]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/questions",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}", "questions"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}",
+                "questions"
+              ]
             },
             "description": "Replaces every question on the paper, then regenerates vectors and insights. order is assigned from the array index and is not a request field.\n\nquestions is required and must be a non-empty array.\nEach item:\n- question: required. Rows with a blank question are dropped.\n- number: optional. Defaults to the 1-based index.\n- answer: optional.\n- answerNotes: optional.\n- marks: optional number, or null."
           }
@@ -221,16 +363,269 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/process",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}", "process"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}",
+                "process"
+              ]
             },
             "description": "Re-runs Gemini extraction for the stored PDF. No query params and no body. Returns 202 when extraction is already running for this paper."
+          }
+        },
+        {
+          "name": "Reformat one paper",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncPlain\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/reformat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}",
+                "reformat"
+              ]
+            },
+            "description": "Re-reads the PDF into HTML for each existing question. Body: syncPlain (boolean). Response includes missing/mismatched/partial lists and hasBackground."
+          }
+        },
+        {
+          "name": "Reformat / verify all",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"onlyUnformatted\": false,\n  \"syncPlain\": true,\n  \"concurrency\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/reformat-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "reformat-all"
+              ]
+            },
+            "description": "Background job. onlyUnformatted defaults true; send false to verify every paper with a PDF. Returns 202 or 409. Poll reformat-status for issues[]."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Started or already running', function () {",
+                  "  pm.expect([202, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reformat status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/reformat-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "reformat-status"
+              ]
+            },
+            "description": "Job progress: isRunning, done/total, errors[], issues[] (missing/mismatched/partial), papersPending, questionsFormatted."
+          }
+        },
+        {
+          "name": "Get AI lifetime limit",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/ai-limit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "ai-limit"
+              ]
+            },
+            "description": "Global pastQuestionLifetimeLimit."
+          }
+        },
+        {
+          "name": "Set AI lifetime limit",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pastQuestionLifetimeLimit\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/ai-limit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "ai-limit"
+              ]
+            },
+            "description": "Body: pastQuestionLifetimeLimit (integer ≥ 1)."
           }
         },
         {
@@ -238,14 +633,31 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/embeddings",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}", "embeddings"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}",
+                "embeddings"
+              ]
             },
             "description": "Removes Qdrant vectors for this paper without deleting the paper, questions, or PDF. Use when content should stop appearing in chat retrieval."
           }
@@ -255,14 +667,30 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "admin", "past-questions", "{{pastQuestionPaperId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}"
+              ]
             },
             "description": "Deletes the paper, its questions, its insights, the S3 file, and stored vectors. No query params and no body."
           }
@@ -278,14 +706,28 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/past-questions?categoryId={{categoryId}}&year=&level=",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "past-questions"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions"
+              ],
               "query": [
                 {
                   "key": "categoryId",
@@ -312,14 +754,30 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/past-questions/insights/analytics?categoryId={{categoryId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "past-questions", "insights", "analytics"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "insights",
+                "analytics"
+              ],
               "query": [
                 {
                   "key": "categoryId",
@@ -336,14 +794,29 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/past-questions/insights?categoryId={{categoryId}}&level=2&paperCode=2.1&title=",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "past-questions", "insights"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "insights"
+              ],
               "query": [
                 {
                   "key": "categoryId",
@@ -375,31 +848,225 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "past-questions", "{{pastQuestionPaperId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "{{pastQuestionPaperId}}"
+              ]
             },
-            "description": "ACTIVE papers only. Questions are sorted by order. No query params."
+            "description": "ACTIVE papers only. Includes backgroundHtml, backgroundText, hasBackground, and title with trailing Paper/Solutions stripped. Questions sorted by order."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Paper ok', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const paper = json.response || {};",
+                  "if (paper._id) pm.collectionVariables.set('pastQuestionPaperId', String(paper._id));",
+                  "const q = (paper.questions || [])[0];",
+                  "if (q && q._id) pm.collectionVariables.set('pastQuestionItemId', String(q._id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AI quota",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/ai-quota",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "ai-quota"
+              ]
+            },
+            "description": "Lifetime past-question AI usage vs limit. Staff unlimited. Returned again on chat as limitInfo."
           }
+        },
+        {
+          "name": "Chat history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/history?paperId={{pastQuestionPaperId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "paperId",
+                  "value": "{{pastQuestionPaperId}}",
+                  "description": "Optional paper ObjectId filter."
+                }
+              ]
+            },
+            "description": "Up to 40 past-question chat turns for the signed-in student."
+          }
+        },
+        {
+          "name": "Chat audio stream",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT. USER or ADMIN for student routes; ADMIN for admin routes."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's device_id."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional IANA timezone, for example Africa/Accra."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body."
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream",
+                "description": "SSE stream: text / audio / error / end events."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Explain the marking approach for this sitting.\",\n  \"scope\": \"paper\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"voiceId\": \"{{voiceId}}\",\n  \"history\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/chat-audio-stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "chat-audio-stream"
+              ]
+            },
+            "description": "SSE. Same body as /chat plus optional voiceId / voiceName.\nStreams text tokens for typewriter UI while Gemini TTS compiles sentence audio (WAV base64).\nEvents: text, audio, error, end. Same lifetime quota and 10/min rate limit as /chat.\nRecords student activity ai_query when finished."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Stream or documented error', function () {",
+                  "  pm.expect([200, 401, 403, 404, 429]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Paper and course insights",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}/insights",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "past-questions", "{{pastQuestionPaperId}}", "insights"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "{{pastQuestionPaperId}}",
+                "insights"
+              ]
             },
             "description": "Saved insight for this sitting, the course insight, and topic frequency. No query params. Path id is the paper id."
           }
@@ -409,20 +1076,42 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"question\": \"What are the common examiner comments on this paper?\",\n  \"scope\": \"paper\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"history\": [\n    {\n      \"role\": \"user\",\n      \"text\": \"Which topics showed up in this sitting?\"\n    },\n    {\n      \"role\": \"model\",\n      \"text\": \"Revenue recognition and leases.\"\n    }\n  ]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/v2/past-questions/chat",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "past-questions", "chat"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "chat"
+              ]
             },
             "description": "scope paper requires paperId.\n\nBody:\n- question: required.\n- scope: paper | question | course. Defaults to paper.\n- paperId: required for paper scope.\n- history: optional. Up to the last 12 turns. Each turn uses role user, assistant, model, or ai, and text (content, question, or answer are also read). When history is omitted, the last 6 saved chats for this paper are used."
           }
@@ -432,20 +1121,42 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"question\": \"How should I structure this answer?\",\n  \"scope\": \"question\",\n  \"questionId\": \"{{pastQuestionItemId}}\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"history\": []\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/v2/past-questions/chat",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "past-questions", "chat"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "chat"
+              ]
             },
             "description": "scope question requires questionId. paperId is optional here; the paper is loaded from the question. The desktop client sends both. history is optional and may be an empty array."
           }
@@ -455,20 +1166,42 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"question\": \"Which topics keep repeating in Financial Reporting?\",\n  \"scope\": \"course\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"level\": \"2\",\n  \"paperCode\": \"2.1\",\n  \"history\": [\n    {\n      \"role\": \"user\",\n      \"text\": \"Summarise the last July paper.\"\n    },\n    {\n      \"role\": \"model\",\n      \"text\": \"The July paper focused on leases and provisions.\"\n    }\n  ]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/v2/past-questions/chat",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "past-questions", "chat"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "chat"
+              ]
             },
             "description": "Matches the desktop client. When paperId is present it selects that paper, and categoryId, level, and paperCode are not used to find it. title is not a chat field."
           }
@@ -478,25 +1211,60 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "x-device-id", "value": "{{deviceId}}" },
-              { "key": "x-timezone", "value": "{{timezone}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}"
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"question\": \"Which topics keep repeating in Financial Reporting?\",\n  \"scope\": \"course\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"level\": \"2\",\n  \"paperCode\": \"2.1\",\n  \"history\": []\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/v2/past-questions/chat",
-              "host": ["{{baseUrl}}"],
-              "path": ["v2", "past-questions", "chat"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "chat"
+              ]
             },
             "description": "Course chat without paperId. categoryId and level are required on this path. paperCode is optional and is uppercased. The first matching successful paper is used. Omit paperCode only when you want the first paper for that category and level."
           }
         }
       ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('timezone')) {",
+          "  pm.collectionVariables.set('timezone', 'UTC');",
+          "}"
+        ]
+      }
     }
   ]
 }

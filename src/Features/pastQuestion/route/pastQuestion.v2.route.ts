@@ -3,17 +3,12 @@ import { Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { authentification } from "../../../middlewares/authentication.middleware";
 import { authorization } from "../../../middlewares/authorization.middleware";
-import { requirePastQuestionAccess } from "../../../middlewares/requirePastQuestionAccess.middleware";
 import { Roles } from "../../../enums/roles.enum";
 import { PastQuestionV2Controller } from "../controllers/pastQuestion.v2.controller";
 
 const Router = express.Router();
 
-Router.use(
-  authentification,
-  authorization([Roles.USER, Roles.ADMIN]),
-  requirePastQuestionAccess
-);
+Router.use(authentification, authorization([Roles.USER, Roles.ADMIN]));
 
 const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -33,8 +28,20 @@ Router.get("/insights", (req: Request, res: Response) => {
   PastQuestionV2Controller.courseInsights(req, res);
 });
 
+Router.get("/ai-quota", (req: Request, res: Response) => {
+  PastQuestionV2Controller.aiQuota(req, res);
+});
+
+Router.get("/history", (req: Request, res: Response) => {
+  PastQuestionV2Controller.history(req, res);
+});
+
 Router.post("/chat", chatLimiter, (req: Request, res: Response) => {
   PastQuestionV2Controller.chat(req, res);
+});
+
+Router.post("/chat-audio-stream", chatLimiter, (req: Request, res: Response) => {
+  PastQuestionV2Controller.chatAudioStream(req, res);
 });
 
 Router.get("/:id/insights", (req: Request, res: Response) => {

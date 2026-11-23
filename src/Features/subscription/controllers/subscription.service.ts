@@ -56,38 +56,275 @@ const isSameDay = (a?: Date | null, b?: Date | null) => {
   return startOfDay(a).getTime() === startOfDay(b).getTime();
 };
 
+const BUILTIN_PLANS = [
+  { code: "monthly", name: "Monthly", intervalDays: 30, sortOrder: 1 },
+  { code: "quarterly", name: "Quarterly", intervalDays: 90, sortOrder: 2 },
+  { code: "annual", name: "Annual", intervalDays: 365, sortOrder: 3 },
+];
+
+let ensuringPlans: Promise<void> | null = null;
+
+const dropLegacySingletonIndex = async () => {
+  const indexes = await SubscriptionPlan.collection.indexes();
+  for (const index of indexes) {
+    if (!index.unique || index.name === "_id_") continue;
+    const keys = Object.keys(index.key || {});
+    if (keys.length === 1 && keys[0] === "code") continue;
+    await SubscriptionPlan.collection.dropIndex(index.name).catch(() => {});
+  }
+};
+
+const sharedFrom = (plan: any) => ({
+  currency: plan?.currency || "GHS",
+  gracePeriodDays: plan?.gracePeriodDays ?? 7,
+  reminderDaysBeforeExpiry: plan?.reminderDaysBeforeExpiry ?? 3,
+  dailyAiLimit: plan?.dailyAiLimit ?? 10,
+  monthlyAiLimit: plan?.monthlyAiLimit ?? 100,
+});
+
+export const ensureSubscriptionPlans = async () => {
+  if (!ensuringPlans) {
+    ensuringPlans = (async () => {
+      await dropLegacySingletonIndex();
+      const existing = await SubscriptionPlan.find({}).sort({ createdAt: 1 });
+      const legacy = existing.find((plan: any) => !plan.code);
+      if (legacy) {
+        legacy.code = "monthly";
+        legacy.name = legacy.name || "Monthly";
+        legacy.isBuiltin = true;
+        legacy.sortOrder = 1;
+        if (!legacy.intervalDays || legacy.intervalDays < 1) legacy.intervalDays = 30;
+        await legacy.save();
+      }
+
+      const monthly =
+        (await SubscriptionPlan.findOne({ code: "monthly" })) ||
+        (await SubscriptionPlan.findOne({}));
+      const shared = sharedFrom(monthly);
+
+      for (const builtin of BUILTIN_PLANS) {
+        const found = await SubscriptionPlan.findOne({ code: builtin.code });
+        if (found) {
+          if (!found.isBuiltin) {
+            found.isBuiltin = true;
+            await found.save();
+          }
+          continue;
+        }
+        const isMonthly = builtin.code === "monthly";
+        await SubscriptionPlan.create({
+          ...builtin,
+          ...shared,
+          amount: isMonthly ? monthly?.amount || 0 : 0,
+          isActive: isMonthly ? Boolean(monthly?.isActive) : false,
+          isBuiltin: true,
+          description: `${builtin.name} AI subscription`,
+        });
+      }
+    })().catch((error) => {
+      ensuringPlans = null;
+      throw error;
+    });
+  }
+  return ensuringPlans;
+};
+
 export const getOrCreateSubscriptionPlan = async () => {
-  return SubscriptionPlan.findOneAndUpdate(
-    {},
-    {
-      $setOnInsert: {
-        amount: 0,
-        currency: "GHS",
-        intervalDays: 30,
-        gracePeriodDays: 7,
-        reminderDaysBeforeExpiry: 3,
-        dailyAiLimit: 10,
-        monthlyAiLimit: 100,
-        isActive: false,
-        description:
-          "Monthly AI subscription for past questions and AI usage limits",
-      },
-    },
-    { upsert: true, new: true }
-  );
+  await ensureSubscriptionPlans();
+  const monthly = await SubscriptionPlan.findOne({ code: "monthly" });
+  if (monthly) return monthly;
+  return SubscriptionPlan.findOne({}).sort({ sortOrder: 1, createdAt: 1 });
+};
+
+export const listSubscriptionPlans = async () => {
+  await ensureSubscriptionPlans();
+  return SubscriptionPlan.find({}).sort({ sortOrder: 1, createdAt: 1 });
+};
+
+export const getPlanByIdOrCode = async (idOrCode?: string | null) => {
+  await ensureSubscriptionPlans();
+  const key = String(idOrCode || "").trim();
+  if (!key) return getOrCreateSubscriptionPlan();
+  if (mongoose.Types.ObjectId.isValid(key)) {
+    const byId = await SubscriptionPlan.findById(key);
+    if (byId) return byId;
+  }
+  return SubscriptionPlan.findOne({ code: key.toLowerCase() });
+};
+
+const slugifyPlanCode = (name: string) => {
+  const base = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return base || "custom";
+};
+
+export const createCustomSubscriptionPlan = async (input: {
+  name: string;
+  intervalDays: number;
+  amount: number;
+  description?: string;
+  isActive?: boolean;
+  updatedBy?: string;
+}) => {
+  const monthly = await getOrCreateSubscriptionPlan();
+  const shared = sharedFrom(monthly);
+  let code = slugifyPlanCode(input.name);
+  if (BUILTIN_PLANS.some((plan) => plan.code === code)) {
+    code = `${code}-custom`;
+  }
+  const taken = await SubscriptionPlan.findOne({ code });
+  if (taken) code = `${code}-${uuidv4().slice(0, 6)}`;
+  const amount = Number(input.amount);
+  const plan = await SubscriptionPlan.create({
+    code,
+    name: input.name.trim(),
+    intervalDays: input.intervalDays,
+    amount,
+    ...shared,
+    isActive: Boolean(input.isActive && amount > 0),
+    isBuiltin: false,
+    sortOrder: 100,
+    description: input.description?.trim() || input.name.trim(),
+    updatedBy: input.updatedBy || "admin",
+  });
+  return plan;
+};
+
+export const updateSubscriptionPlanModel = async (
+  idOrCode: string,
+  input: {
+    name?: string;
+    amount?: number;
+    intervalDays?: number;
+    description?: string;
+    isActive?: boolean;
+    updatedBy?: string;
+  }
+) => {
+  const plan = await getPlanByIdOrCode(idOrCode);
+  if (!plan) return null;
+  if (typeof input.name === "string" && input.name.trim()) {
+    plan.name = input.name.trim();
+  }
+  if (input.amount !== undefined) plan.amount = input.amount;
+  if (input.intervalDays !== undefined) {
+    if (plan.isBuiltin) {
+      const builtin = BUILTIN_PLANS.find((row) => row.code === plan.code);
+      plan.intervalDays = builtin?.intervalDays || plan.intervalDays;
+    } else {
+      plan.intervalDays = input.intervalDays;
+    }
+  }
+  if (typeof input.description === "string") plan.description = input.description;
+  if (typeof input.isActive === "boolean") plan.isActive = input.isActive;
+  if (plan.isActive && (!plan.amount || plan.amount <= 0)) {
+    const error: any = new Error(
+      "Set a price greater than 0 before activating this model"
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+  plan.updatedBy = input.updatedBy || plan.updatedBy;
+  await plan.save();
+  return plan;
+};
+
+export const deleteCustomSubscriptionPlan = async (idOrCode: string) => {
+  const plan = await getPlanByIdOrCode(idOrCode);
+  if (!plan) return { deleted: false, missing: true };
+  if (plan.isBuiltin || BUILTIN_PLANS.some((row) => row.code === plan.code)) {
+    const error: any = new Error("Built-in models can be turned off, not deleted");
+    error.statusCode = 400;
+    throw error;
+  }
+  await SubscriptionPlan.deleteOne({ _id: plan._id });
+  return { deleted: true, missing: false };
+};
+
+export const updateSharedSubscriptionSettings = async (input: {
+  currency?: string;
+  gracePeriodDays?: number;
+  reminderDaysBeforeExpiry?: number;
+  dailyAiLimit?: number;
+  monthlyAiLimit?: number;
+  description?: string;
+  updatedBy?: string;
+}) => {
+  await ensureSubscriptionPlans();
+  const $set: Record<string, unknown> = {
+    updatedBy: input.updatedBy || "admin",
+  };
+  if (input.currency) $set.currency = input.currency;
+  if (input.gracePeriodDays !== undefined) $set.gracePeriodDays = input.gracePeriodDays;
+  if (input.reminderDaysBeforeExpiry !== undefined) {
+    $set.reminderDaysBeforeExpiry = input.reminderDaysBeforeExpiry;
+  }
+  if (input.dailyAiLimit !== undefined) $set.dailyAiLimit = input.dailyAiLimit;
+  if (input.monthlyAiLimit !== undefined) $set.monthlyAiLimit = input.monthlyAiLimit;
+  await SubscriptionPlan.updateMany({}, { $set });
+  if (input.description !== undefined) {
+    await SubscriptionPlan.updateOne(
+      { code: "monthly" },
+      { $set: { description: input.description } }
+    );
+  }
+  return getOrCreateSubscriptionPlan();
+};
+
+export const adminPlanCatalog = async () => {
+  const plans = await listSubscriptionPlans();
+  const monthly =
+    plans.find((plan: any) => plan.code === "monthly") || plans[0];
+  return {
+    currency: monthly?.currency || "GHS",
+    gracePeriodDays: monthly?.gracePeriodDays ?? 7,
+    reminderDaysBeforeExpiry: monthly?.reminderDaysBeforeExpiry ?? 3,
+    dailyAiLimit: monthly?.dailyAiLimit ?? 10,
+    monthlyAiLimit: monthly?.monthlyAiLimit ?? 100,
+    description: monthly?.description || "",
+    intervalDays: monthly?.intervalDays || 30,
+    amount: monthly?.amount || 0,
+    isActive: Boolean(monthly?.isActive),
+    updatedAt: monthly?.updatedAt,
+    updatedBy: monthly?.updatedBy,
+    plans,
+  };
 };
 
 export const publicPlanPayload = (plan: any) => ({
-  amount: plan.amount,
-  currency: plan.currency,
-  intervalDays: plan.intervalDays,
-  gracePeriodDays: plan.gracePeriodDays,
-  reminderDaysBeforeExpiry: plan.reminderDaysBeforeExpiry,
-  dailyAiLimit: plan.dailyAiLimit,
-  monthlyAiLimit: plan.monthlyAiLimit,
-  isActive: Boolean(plan.isActive && plan.amount > 0),
-  description: plan.description,
+  id: plan?._id,
+  code: plan?.code || "monthly",
+  name: plan?.name || "Monthly",
+  amount: plan?.amount,
+  currency: plan?.currency,
+  intervalDays: plan?.intervalDays,
+  gracePeriodDays: plan?.gracePeriodDays,
+  reminderDaysBeforeExpiry: plan?.reminderDaysBeforeExpiry,
+  dailyAiLimit: plan?.dailyAiLimit,
+  monthlyAiLimit: plan?.monthlyAiLimit,
+  isActive: Boolean(plan?.isActive && plan?.amount > 0),
+  isBuiltin: Boolean(plan?.isBuiltin),
+  description: plan?.description,
+  sortOrder: plan?.sortOrder || 0,
 });
+
+export const publicCatalogPayload = (plans: any[]) => {
+  const list = plans || [];
+  const active = list.filter((plan) => plan.isActive && plan.amount > 0);
+  const featured =
+    active.find((plan) => plan.code === "monthly") ||
+    list.find((plan) => plan.code === "monthly") ||
+    active[0] ||
+    list[0];
+  return {
+    ...publicPlanPayload(featured),
+    plans: list.map(publicPlanPayload),
+  };
+};
 
 export const generateInvoiceNumber = () => {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -99,6 +336,23 @@ export const hasActiveCourseEnrollment = async (email?: string) => {
   if (!normalized) return false;
   const count = await countActiveCourseEnrollments(normalized);
   return count > 0;
+};
+
+/** Flags returned with login so clients know what the account can use. */
+export const loginAccessSnapshot = async (userId?: string, email?: string) => {
+  const id = String(userId || "");
+  let activeSubscription = false;
+  if (id && mongoose.Types.ObjectId.isValid(id)) {
+    const open = await findOpenSubscription(id);
+    const latest =
+      open ||
+      (await Subscription.findOne({
+        userId: new mongoose.Types.ObjectId(id),
+      }).sort({ createdAt: -1 }));
+    activeSubscription = isSubscriptionAccessActive(latest);
+  }
+  const enrolledStatus = await hasActiveCourseEnrollment(email);
+  return { activeSubscription, enrolledStatus };
 };
 
 export const getUserEnrolledCourseIds = async (email?: string) => {
@@ -206,6 +460,7 @@ const createInvoiceForPeriod = async (params: {
     periodEnd: params.periodEnd,
     dueDate: params.dueDate,
     status: SubscriptionInvoiceStatus.OPEN,
+    planId: params.plan?._id || null,
   });
   await invoice.save();
   params.subscription.lastInvoice = invoice._id;
@@ -279,11 +534,18 @@ export const applySuccessfulInvoicePayment = async (
     return { invoice, alreadyPaid: true };
   }
 
-  const plan = await getOrCreateSubscriptionPlan();
   const subscription = await Subscription.findById(invoice.subscription);
   if (!subscription) {
     throw new Error("Subscription not found for invoice");
   }
+
+  let plan = invoice.planId
+    ? await SubscriptionPlan.findById(invoice.planId)
+    : null;
+  if (!plan && subscription.planId) {
+    plan = await SubscriptionPlan.findById(subscription.planId);
+  }
+  if (!plan) plan = await getOrCreateSubscriptionPlan();
 
   const now = new Date();
   const previousEnd = subscription.currentPeriodEnd
@@ -291,7 +553,7 @@ export const applySuccessfulInvoicePayment = async (
     : null;
   const periodStart =
     previousEnd && previousEnd > now ? previousEnd : now;
-  const periodEnd = addDays(periodStart, plan.intervalDays || 30);
+  const periodEnd = addDays(periodStart, plan?.intervalDays || 30);
 
   invoice.status = SubscriptionInvoiceStatus.PAID;
   invoice.paidAt = now;
@@ -305,6 +567,7 @@ export const applySuccessfulInvoicePayment = async (
   subscription.currentPeriodEnd = periodEnd;
   subscription.gracePeriodEndsAt = null;
   subscription.lastInvoice = invoice._id;
+  subscription.planId = plan?._id || subscription.planId;
   subscription.isManual = false;
   if (!subscription.cancelAtPeriodEnd) {
     subscription.cancelledAt = null;
@@ -324,16 +587,22 @@ export const applySuccessfulInvoicePayment = async (
 export const startSubscriptionCheckout = async (params: {
   userId: string;
   email: string;
+  planId?: string;
 }) => {
-  const plan = await getOrCreateSubscriptionPlan();
+  const plan = await getPlanByIdOrCode(params.planId);
+  if (!plan) {
+    const error: any = new Error("Subscription model not found");
+    error.statusCode = 404;
+    throw error;
+  }
   if (!plan.isActive) {
-    const error: any = new Error("Subscription plan is not active");
+    const error: any = new Error("This subscription model is not active");
     error.statusCode = 400;
     throw error;
   }
   if (!plan.amount || plan.amount <= 0) {
     const error: any = new Error(
-      "Subscription plan price is not configured. An admin must set amount > 0 on PUT /v2/admin/subscription/plan"
+      "This subscription model has no price. An admin must set amount > 0 before it can be sold."
     );
     error.statusCode = 400;
     throw error;
@@ -372,7 +641,11 @@ export const startSubscriptionCheckout = async (params: {
       userId: new mongoose.Types.ObjectId(params.userId),
       email: params.email,
       status: SubscriptionStatus.PENDING,
+      planId: plan._id,
     });
+    await subscription.save();
+  } else {
+    subscription.planId = plan._id;
     await subscription.save();
   }
 
@@ -380,6 +653,16 @@ export const startSubscriptionCheckout = async (params: {
     subscription: subscription._id,
     status: SubscriptionInvoiceStatus.OPEN,
   }).sort({ createdAt: -1 });
+
+  if (
+    invoice &&
+    ((invoice.planId && String(invoice.planId) !== String(plan._id)) ||
+      Number(invoice.amount) !== Number(plan.amount))
+  ) {
+    invoice.status = SubscriptionInvoiceStatus.VOID;
+    await invoice.save();
+    invoice = null;
+  }
 
   if (!invoice) {
     const periodStart = new Date();
@@ -414,9 +697,10 @@ export const grantSubscription = async (params: {
   days?: number;
   note?: string;
   grantedBy?: string;
+  planId?: string;
 }) => {
-  const plan = await getOrCreateSubscriptionPlan();
-  const days = params.days && params.days > 0 ? params.days : plan.intervalDays || 30;
+  const plan = (await getPlanByIdOrCode(params.planId)) || (await getOrCreateSubscriptionPlan());
+  const days = params.days && params.days > 0 ? params.days : plan?.intervalDays || 30;
   const now = new Date();
 
   let subscription = await findOpenSubscription(params.userId);
@@ -425,7 +709,10 @@ export const grantSubscription = async (params: {
       userId: new mongoose.Types.ObjectId(params.userId),
       email: params.email,
       status: SubscriptionStatus.PENDING,
+      planId: params.planId ? plan?._id || null : null,
     });
+  } else if (params.planId && plan?._id) {
+    subscription.planId = plan._id;
   }
 
   const hasLiveAccess =
@@ -449,6 +736,7 @@ export const grantSubscription = async (params: {
     periodEnd,
     dueDate: now,
     status: SubscriptionInvoiceStatus.PAID,
+    planId: params.planId ? plan?._id || null : null,
     paidAt: now,
     paystackData: {
       manual: true,
@@ -504,8 +792,8 @@ export const markOverdueInvoices = async (now = new Date()) => {
 };
 
 export const createRenewalInvoicesAndRemind = async (now = new Date()) => {
-  const plan = await getOrCreateSubscriptionPlan();
-  const reminderDays = plan.reminderDaysBeforeExpiry ?? 3;
+  const settings = await getOrCreateSubscriptionPlan();
+  const reminderDays = settings.reminderDaysBeforeExpiry ?? 3;
   const reminderWindowStart = addDays(now, reminderDays);
 
   const dueSoon = await Subscription.find({
@@ -526,6 +814,9 @@ export const createRenewalInvoicesAndRemind = async (now = new Date()) => {
     if (existing) continue;
 
     const periodStart = new Date(subscription.currentPeriodEnd);
+    const plan = subscription.planId
+      ? (await SubscriptionPlan.findById(subscription.planId)) || settings
+      : settings;
     const periodEnd = addDays(periodStart, plan.intervalDays || 30);
     const invoice = await createInvoiceForPeriod({
       subscription,
@@ -661,6 +952,79 @@ export const applyPeriodEndTransitions = async (now = new Date()) => {
       event: "subscription_expired",
     });
   }
+};
+
+const loadSubscription = async (subscriptionId: string) => {
+  if (!subscriptionId || !mongoose.Types.ObjectId.isValid(subscriptionId)) {
+    const error: any = new Error("Invalid subscription id");
+    error.statusCode = 400;
+    throw error;
+  }
+  const subscription = await Subscription.findById(subscriptionId);
+  if (!subscription) {
+    const error: any = new Error("Subscription not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  return subscription;
+};
+
+const voidInvoices = async (filter: Record<string, unknown>) => {
+  await SubscriptionInvoice.updateMany(
+    {
+      ...filter,
+      status: {
+        $in: [SubscriptionInvoiceStatus.OPEN, SubscriptionInvoiceStatus.OVERDUE],
+      },
+    },
+    { $set: { status: SubscriptionInvoiceStatus.VOID } }
+  );
+};
+
+/** Stops access now and cancels any unpaid invoice. */
+export const revokeSubscriptionAccess = async (subscriptionId: string) => {
+  const subscription = await loadSubscription(subscriptionId);
+  const now = new Date();
+  subscription.status = SubscriptionStatus.EXPIRED;
+  subscription.currentPeriodEnd = now;
+  subscription.gracePeriodEndsAt = null;
+  subscription.cancelAtPeriodEnd = true;
+  subscription.cancelledAt = now;
+  await subscription.save();
+  await voidInvoices({ subscription: subscription._id });
+  await notifySubscriptionUser(String(subscription.userId), {
+    title: "AI subscription access removed",
+    body: "Your AI subscription access has been removed. Subscribe again to restore it.",
+    event: "subscription_revoked",
+  });
+  return subscription;
+};
+
+/** Keeps access until the current period ends and stops the next invoice. */
+export const endSubscriptionAtPeriodEnd = async (subscriptionId: string) => {
+  const subscription = await loadSubscription(subscriptionId);
+  if (!isSubscriptionAccessActive(subscription) && subscription.cancelAtPeriodEnd) {
+    const error: any = new Error("This subscription has already ended");
+    error.statusCode = 400;
+    throw error;
+  }
+  subscription.cancelAtPeriodEnd = true;
+  subscription.cancelledAt = subscription.cancelledAt || new Date();
+  await subscription.save();
+  if (subscription.currentPeriodEnd) {
+    await voidInvoices({
+      subscription: subscription._id,
+      periodStart: { $gte: subscription.currentPeriodEnd },
+    });
+  }
+  await notifySubscriptionUser(String(subscription.userId), {
+    title: "Subscription will not renew",
+    body: subscription.currentPeriodEnd
+      ? `Your AI access continues until ${new Date(subscription.currentPeriodEnd).toDateString()}. No further invoice will be created.`
+      : "Your subscription will not renew and no further invoice will be created.",
+    event: "subscription_ending",
+  });
+  return subscription;
 };
 
 export const runSubscriptionBillingJob = async () => {

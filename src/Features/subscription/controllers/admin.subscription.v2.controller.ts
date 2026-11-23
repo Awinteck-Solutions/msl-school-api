@@ -34,13 +34,19 @@ import {
   transcribeVideoWithGemini,
 } from "../../geminiAi/controllers/geminiAi.shared";
 import {
+  adminPlanCatalog,
+  deleteCustomSubscriptionPlan,
   getOrCreateSubscriptionPlan,
+  endSubscriptionAtPeriodEnd,
   grantSubscription,
   publicPlanPayload,
+  revokeSubscriptionAccess,
   serializeSubscription,
+  updateSharedSubscriptionSettings,
+  updateSubscriptionPlanModel,
+  createCustomSubscriptionPlan,
 } from "./subscription.service";
 import {
-  SubscriptionContentStatus,
   SubscriptionResourceFileStatus,
   SubscriptionResourceType,
   SubscriptionStatus,
@@ -49,8 +55,16 @@ import Subscription from "../schema/subscription.schema";
 import SubscriptionInvoice from "../schema/subscriptionInvoice.schema";
 import SubscriptionResource from "../schema/subscriptionResource.schema";
 import SubscriptionResourceFile from "../schema/subscriptionResourceFile.schema";
+import SubscriptionResourceLesson from "../schema/subscriptionResourceLesson.schema";
 import AiUsage from "../../mslAi/schema/aiUsage.schema";
 import User from "../../user/schema/user.schema";
+import {
+  assignFlatFileToLessonSlot,
+  hydrateSubscriptionResources,
+  normalizeResourceStatus,
+  resourceCategoryFields,
+  subscriptionFileKeysSafeToDeleteFromS3,
+} from "../subscriptionResourceLesson.service";
 
 interface MulterRequest extends Request {
   file?: multer.File;
@@ -235,11 +249,11 @@ const deleteSubscriptionQdrantPoints = async (options: {
 export class AdminSubscriptionV2Controller {
   static async getPlan(req: Request, res: Response) {
     try {
-      const plan = await getOrCreateSubscriptionPlan();
+      const catalog = await adminPlanCatalog();
       return res.status(200).json({
         status: true,
         message: "Subscription plan fetched",
-        response: plan,
+        response: catalog,
       });
     } catch (error: any) {
       return res.status(500).json({
@@ -250,79 +264,204 @@ export class AdminSubscriptionV2Controller {
     }
   }
 
+  static async createPlan(req: Request, res: Response) {
+    try {
+      const currentUser = req["currentUser"] as { email?: string } | undefined;
+      const name = String(req.body?.name || "").trim();
+      const intervalDays = Number(req.body?.intervalDays);
+      const amount = Number(req.body?.amount);
+      if (!name) {
+        return res.status(400).json({ status: false, message: "Name is required" });
+      }
+      if (!Number.isInteger(intervalDays) || intervalDays < 1) {
+        return res.status(400).json({
+          status: false,
+          message: "intervalDays must be a whole number of at least 1",
+        });
+      }
+      if (!Number.isFinite(amount) || amount < 0) {
+        return res.status(400).json({ status: false, message: "Amount must be 0 or more" });
+      }
+      const plan = await createCustomSubscriptionPlan({
+        name,
+        intervalDays,
+        amount,
+        description: typeof req.body?.description === "string" ? req.body.description : undefined,
+        isActive: req.body?.isActive === true || req.body?.isActive === "true",
+        updatedBy: currentUser?.email || "admin",
+      });
+      return res.status(201).json({
+        status: true,
+        message: "Subscription model created",
+        response: plan,
+      });
+    } catch (error: any) {
+      return res.status(error?.statusCode || 500).json({
+        status: false,
+        message: error?.message || "Failed to create model",
+      });
+    }
+  }
+
+  static async updatePlanModel(req: Request, res: Response) {
+    try {
+      const currentUser = req["currentUser"] as { email?: string } | undefined;
+      const planId = String(req.params.planId || "");
+      const body = (req.body || {}) as Record<string, unknown>;
+      const input: {
+        name?: string;
+        amount?: number;
+        intervalDays?: number;
+        description?: string;
+        isActive?: boolean;
+        updatedBy?: string;
+      } = { updatedBy: currentUser?.email || "admin" };
+      if (typeof body.name === "string") input.name = body.name;
+      if (typeof body.description === "string") input.description = body.description;
+      if (body.amount !== undefined && body.amount !== "") {
+        const amount = Number(body.amount);
+        if (!Number.isFinite(amount) || amount < 0) {
+          return res.status(400).json({ status: false, message: "Amount must be 0 or more" });
+        }
+        input.amount = amount;
+      }
+      if (body.intervalDays !== undefined && body.intervalDays !== "") {
+        const intervalDays = Number(body.intervalDays);
+        if (!Number.isInteger(intervalDays) || intervalDays < 1) {
+          return res.status(400).json({
+            status: false,
+            message: "intervalDays must be a whole number of at least 1",
+          });
+        }
+        input.intervalDays = intervalDays;
+      }
+      if (typeof body.isActive === "boolean") input.isActive = body.isActive;
+      else if (typeof body.isActive === "string") {
+        input.isActive = body.isActive.toLowerCase() === "true";
+      }
+      const plan = await updateSubscriptionPlanModel(planId, input);
+      if (!plan) {
+        return res.status(404).json({ status: false, message: "Model not found" });
+      }
+      return res.status(200).json({
+        status: true,
+        message: "Subscription model updated",
+        response: plan,
+      });
+    } catch (error: any) {
+      return res.status(error?.statusCode || 500).json({
+        status: false,
+        message: error?.message || "Failed to update model",
+      });
+    }
+  }
+
+  static async deletePlanModel(req: Request, res: Response) {
+    try {
+      const planId = String(req.params.planId || "");
+      const result = await deleteCustomSubscriptionPlan(planId);
+      if (result.missing) {
+        return res.status(404).json({ status: false, message: "Model not found" });
+      }
+      return res.status(200).json({
+        status: true,
+        message: "Subscription model deleted",
+      });
+    } catch (error: any) {
+      return res.status(error?.statusCode || 500).json({
+        status: false,
+        message: error?.message || "Failed to delete model",
+      });
+    }
+  }
+
   static async updatePlan(req: Request, res: Response) {
     try {
       const currentUser = req["currentUser"] as { email?: string } | undefined;
       const body = (req.body || {}) as Record<string, unknown>;
-      const plan = await getOrCreateSubscriptionPlan();
-
-      const numericFields = [
-        "amount",
-        "intervalDays",
-        "gracePeriodDays",
-        "reminderDaysBeforeExpiry",
-        "dailyAiLimit",
-        "monthlyAiLimit",
-      ] as const;
-      if (body.amount === undefined && body.price !== undefined) {
-        body.amount = body.price;
-      }
-
-      for (const field of numericFields) {
-        if (body[field] === undefined || body[field] === "") continue;
+      const updatedBy = currentUser?.email || "admin";
+      const readNumber = (field: string) => {
+        if (body[field] === undefined || body[field] === "") return undefined;
         const value = Number(body[field]);
         if (!Number.isFinite(value) || value < 0) {
-          return res.status(400).json({
-            status: false,
-            message: `${field} must be a valid number`,
-          });
+          return { error: `${field} must be a valid number` };
         }
-        if (
-          (field === "dailyAiLimit" ||
-            field === "monthlyAiLimit" ||
-            field === "intervalDays") &&
-          value < 1
-        ) {
-          return res.status(400).json({
-            status: false,
-            message: `${field} must be greater than 0`,
-          });
-        }
-        (plan as any)[field] = value;
+        return value;
+      };
+
+      const gracePeriodDays = readNumber("gracePeriodDays");
+      const reminderDaysBeforeExpiry = readNumber("reminderDaysBeforeExpiry");
+      const dailyAiLimit = readNumber("dailyAiLimit");
+      const monthlyAiLimit = readNumber("monthlyAiLimit");
+      const invalid = [gracePeriodDays, reminderDaysBeforeExpiry, dailyAiLimit, monthlyAiLimit].find(
+        (value) => value && typeof value === "object" && "error" in value
+      ) as { error: string } | undefined;
+      if (invalid) {
+        return res.status(400).json({ status: false, message: invalid.error });
+      }
+      if (typeof dailyAiLimit === "number" && dailyAiLimit < 1) {
+        return res.status(400).json({ status: false, message: "dailyAiLimit must be greater than 0" });
+      }
+      if (typeof monthlyAiLimit === "number" && monthlyAiLimit < 1) {
+        return res.status(400).json({ status: false, message: "monthlyAiLimit must be greater than 0" });
       }
 
-      if (typeof body.currency === "string" && body.currency.trim()) {
-        plan.currency = body.currency.trim().toUpperCase();
+      await updateSharedSubscriptionSettings({
+        currency:
+          typeof body.currency === "string" && body.currency.trim()
+            ? body.currency.trim().toUpperCase()
+            : undefined,
+        gracePeriodDays: typeof gracePeriodDays === "number" ? gracePeriodDays : undefined,
+        reminderDaysBeforeExpiry:
+          typeof reminderDaysBeforeExpiry === "number" ? reminderDaysBeforeExpiry : undefined,
+        dailyAiLimit: typeof dailyAiLimit === "number" ? dailyAiLimit : undefined,
+        monthlyAiLimit: typeof monthlyAiLimit === "number" ? monthlyAiLimit : undefined,
+        description: typeof body.description === "string" ? body.description : undefined,
+        updatedBy,
+      });
+
+      if (body.amount === undefined && body.price !== undefined) body.amount = body.price;
+      const monthlyPatch: {
+        amount?: number;
+        intervalDays?: number;
+        isActive?: boolean;
+        updatedBy: string;
+      } = { updatedBy };
+      if (body.amount !== undefined && body.amount !== "") {
+        const amount = Number(body.amount);
+        if (!Number.isFinite(amount) || amount < 0) {
+          return res.status(400).json({ status: false, message: "amount must be a valid number" });
+        }
+        monthlyPatch.amount = amount;
       }
-      if (typeof body.description === "string") {
-        plan.description = body.description;
+      if (body.intervalDays !== undefined && body.intervalDays !== "") {
+        const intervalDays = Number(body.intervalDays);
+        if (!Number.isInteger(intervalDays) || intervalDays < 1) {
+          return res.status(400).json({ status: false, message: "intervalDays must be greater than 0" });
+        }
+        monthlyPatch.intervalDays = intervalDays;
       }
-      if (typeof body.isActive === "boolean") {
-        plan.isActive = body.isActive;
-      } else if (typeof body.isActive === "string") {
-        if (body.isActive.toLowerCase() === "true") plan.isActive = true;
-        if (body.isActive.toLowerCase() === "false") plan.isActive = false;
+      if (typeof body.isActive === "boolean") monthlyPatch.isActive = body.isActive;
+      else if (typeof body.isActive === "string") {
+        monthlyPatch.isActive = body.isActive.toLowerCase() === "true";
       }
-      if (plan.isActive && (!plan.amount || plan.amount <= 0)) {
-        return res.status(400).json({
-          status: false,
-          message:
-            "Set amount greater than 0 before activating the subscription plan",
-        });
+      if (
+        monthlyPatch.amount !== undefined ||
+        monthlyPatch.intervalDays !== undefined ||
+        monthlyPatch.isActive !== undefined
+      ) {
+        await updateSubscriptionPlanModel("monthly", monthlyPatch);
       }
-      plan.updatedBy = currentUser?.email || "admin";
-      await plan.save();
 
       return res.status(200).json({
         status: true,
         message: "Subscription plan updated",
-        response: plan,
+        response: await adminPlanCatalog(),
       });
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(error?.statusCode || 500).json({
         status: false,
-        message: "Failed to update plan",
-        error: error?.message || error,
+        message: error?.message || "Failed to update plan",
       });
     }
   }
@@ -389,6 +528,7 @@ export class AdminSubscriptionV2Controller {
       const rawDays = req.body?.days;
       const days = rawDays === undefined || rawDays === null || rawDays === "" ? undefined : Number(rawDays);
       const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 300) : "";
+      const planId = String(req.body?.planId || req.body?.code || "").trim();
 
       if (!email) {
         return res.status(400).json({ status: false, message: "Student email is required" });
@@ -418,6 +558,7 @@ export class AdminSubscriptionV2Controller {
         days,
         note,
         grantedBy: admin.email || admin.id || undefined,
+        planId: planId || undefined,
       });
 
       return res.status(201).json({
@@ -433,6 +574,38 @@ export class AdminSubscriptionV2Controller {
         status: false,
         message: "Failed to grant subscription",
         error: error?.message || error,
+      });
+    }
+  }
+
+  static async revokeSubscription(req: Request, res: Response) {
+    try {
+      const subscription = await revokeSubscriptionAccess(String(req.params.id || ""));
+      return res.status(200).json({
+        status: true,
+        message: "Access revoked",
+        response: serializeSubscription(subscription),
+      });
+    } catch (error: any) {
+      return res.status(error?.statusCode || 500).json({
+        status: false,
+        message: error?.message || "Failed to revoke access",
+      });
+    }
+  }
+
+  static async endSubscription(req: Request, res: Response) {
+    try {
+      const subscription = await endSubscriptionAtPeriodEnd(String(req.params.id || ""));
+      return res.status(200).json({
+        status: true,
+        message: "Subscription will end after the current period",
+        response: serializeSubscription(subscription),
+      });
+    } catch (error: any) {
+      return res.status(error?.statusCode || 500).json({
+        status: false,
+        message: error?.message || "Failed to end subscription",
       });
     }
   }
@@ -505,26 +678,23 @@ export class AdminSubscriptionV2Controller {
       const thumbnail = file
         ? (await uploadFile(file, "subscription-ai")).key
         : null;
+      const categoryFields = await resourceCategoryFields(category);
 
       const resource = await SubscriptionResource.create({
         title,
         description: desc || null,
-        thumbnail, 
-        categoryId:
-          category && mongoose.Types.ObjectId.isValid(category)
-            ? category
-            : undefined,
-        status:
-          status === SubscriptionContentStatus.DEACTIVE
-            ? SubscriptionContentStatus.DEACTIVE
-            : SubscriptionContentStatus.ACTIVE,
-        authorId,
+        thumbnail,
+        ...categoryFields,
+        status: normalizeResourceStatus(status),
+        archived: false,
+        author: authorId,
       });
+      const [response] = await hydrateSubscriptionResources([resource.toObject()]);
 
       return res.status(201).json({
         status: true,
         message: "New subscription resource added",
-        response: resource,
+        response,
       });
     } catch (error: any) {
       return res.status(500).json({
@@ -550,29 +720,25 @@ export class AdminSubscriptionV2Controller {
           message: "id and title are required",
         });
       }
+      const categoryFields = await resourceCategoryFields(category);
       const updated = await SubscriptionResource.findOneAndUpdate(
         { _id: id },
         {
           title,
           description: desc || null,
-          categoryId:
-            category && mongoose.Types.ObjectId.isValid(category)
-              ? category
-              : undefined,
-          status:
-            status === SubscriptionContentStatus.DEACTIVE
-              ? SubscriptionContentStatus.DEACTIVE
-              : SubscriptionContentStatus.ACTIVE,
+          ...categoryFields,
+          status: normalizeResourceStatus(status),
         },
         { new: true }
       );
       if (!updated) {
         return res.status(404).json({ status: false, message: "Resource not found" });
       }
+      const [response] = await hydrateSubscriptionResources([updated.toObject()]);
       return res.status(200).json({
         status: true,
         message: "Subscription resource updated",
-        response: updated,
+        response,
       });
     } catch (error: any) {
       return res.status(500).json({
@@ -602,10 +768,11 @@ export class AdminSubscriptionV2Controller {
       if (!updated) {
         return res.status(404).json({ status: false, message: "Resource not found" });
       }
+      const [response] = await hydrateSubscriptionResources([updated.toObject()]);
       return res.status(200).json({
         status: true,
         message: "Thumbnail updated",
-        response: updated,
+        response,
       });
     } catch (error: any) {
       return res.status(500).json({
@@ -628,13 +795,11 @@ export class AdminSubscriptionV2Controller {
       if (!resource) {
         return res.status(404).json({ status: false, message: "Resource not found" });
       }
-      const files = await SubscriptionResourceFile.find({ resource: id })
-        .sort({ createdAt: -1 })
-        .lean();
+      const [hydrated] = await hydrateSubscriptionResources([resource]);
       return res.status(200).json({
         status: true,
         message: "Resource fetched",
-        response: { ...resource, files },
+        response: hydrated,
       });
     } catch (error: any) {
       return res.status(500).json({
@@ -671,8 +836,7 @@ export class AdminSubscriptionV2Controller {
 
       const qdrantResult = await deleteSubscriptionQdrantPoints({ resourceId: id });
       const s3Result = await deleteS3Keys([
-        resource?.thumbnail,
-        ...files.map((file) => file.fileKey),
+        ...subscriptionFileKeysSafeToDeleteFromS3(files, resource?.thumbnail),
         ...prefixKeys,
       ]);
 
@@ -680,6 +844,7 @@ export class AdminSubscriptionV2Controller {
         await SubscriptionResource.deleteOne({ _id: id });
       }
       await SubscriptionResourceFile.deleteMany({ resource: id });
+      await SubscriptionResourceLesson.deleteMany({ resource: id });
 
       if (!resource && files.length === 0 && qdrantResult.deletedPoints === 0 && s3Result.deletedKeys.length === 0) {
         return res.status(404).json({
@@ -734,7 +899,10 @@ export class AdminSubscriptionV2Controller {
         resourceId: id,
         s3Keys: [file.fileKey],
       });
-      const s3Result = await deleteS3Keys([file.fileKey]);
+      const s3KeysToDelete = file.sharedS3Key
+        ? []
+        : subscriptionFileKeysSafeToDeleteFromS3([file]);
+      const s3Result = await deleteS3Keys(s3KeysToDelete);
 
       await SubscriptionResourceFile.deleteOne({ _id: file._id });
 
@@ -825,6 +993,7 @@ export class AdminSubscriptionV2Controller {
             "admin",
         });
         uploaded.push(saved);
+        await assignFlatFileToLessonSlot(id, fileKey, fileType);
       }
 
       return res.status(200).json({
@@ -859,19 +1028,6 @@ export class AdminSubscriptionV2Controller {
           .lean(),
         SubscriptionResource.countDocuments(filter),
       ]);
-      const resourceIds = items.map((item: any) => item._id);
-      const files = await SubscriptionResourceFile.find({
-        resource: { $in: resourceIds },
-      })
-        .sort({ createdAt: -1 })
-        .lean();
-      const filesByResource = new Map<string, any[]>();
-      for (const file of files) {
-        const key = String(file.resource);
-        const list = filesByResource.get(key) || [];
-        list.push(file);
-        filesByResource.set(key, list);
-      }
       const totalPages = Math.ceil(total / limit);
 
       return res.status(200).json({
@@ -885,10 +1041,7 @@ export class AdminSubscriptionV2Controller {
           hasNextPage: page < totalPages,
           hasPrevPage: page > 1,
         },
-        response: items.map((item: any) => ({
-          ...item,
-          files: filesByResource.get(String(item._id)) || [],
-        })),
+        response: await hydrateSubscriptionResources(items),
       });
     } catch (error: any) {
       return res.status(500).json({
@@ -932,6 +1085,11 @@ export class AdminSubscriptionV2Controller {
           (req["currentUser"] as { email?: string } | undefined)?.email ||
           "admin",
       });
+      await assignFlatFileToLessonSlot(
+        id,
+        sourceUrl,
+        fileType === "pdf" ? SubscriptionResourceType.PDF : SubscriptionResourceType.VIDEO
+      );
 
       res.status(202).json({
         status: true,
@@ -1231,12 +1389,12 @@ export class AdminSubscriptionV2Controller {
           message: "Limits must be greater than 0",
         });
       }
-      const plan = await getOrCreateSubscriptionPlan();
-      plan.dailyAiLimit = dailyAiLimit;
-      plan.monthlyAiLimit = monthlyAiLimit;
-      plan.updatedBy =
-        (req["currentUser"] as { email?: string } | undefined)?.email || "admin";
-      await plan.save();
+      const plan = await updateSharedSubscriptionSettings({
+        dailyAiLimit,
+        monthlyAiLimit,
+        updatedBy:
+          (req["currentUser"] as { email?: string } | undefined)?.email || "admin",
+      });
       return res.status(200).json({
         status: true,
         message: "Subscription AI limits updated",

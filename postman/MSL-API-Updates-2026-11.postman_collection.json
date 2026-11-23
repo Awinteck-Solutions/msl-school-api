@@ -1,0 +1,1567 @@
+{
+  "info": {
+    "_postman_id": "msl-api-updates-2026-11",
+    "name": "MSL API Updates (2026-11)",
+    "description": "# MSL API updates — Nov 2026\n\nDocuments API work shipped from late November 2026: past-question pre-seen/background + reformat/verify issues, spoken chat SSE, TTS voices (including clone), Qdrant delete parity, and optimised admin AI usage.\n\n## Base URL\n`{{baseUrl}}` — API origin with **no trailing slash**. Local default: `http://localhost:4000`.\n\n## Required headers (almost every route)\n| Header | Variable | Notes |\n| --- | --- | --- |\n| `Authorization` | `Bearer {{token}}` | JWT after login / device verify |\n| `x-device-id` | `{{deviceId}}` | Must match user `device_id` or **403** |\n| `x-timezone` | `{{timezone}}` | Optional IANA zone; activity logging |\n\n## Collection variables\nSet `token` and `deviceId` after auth. Other ids are filled by Test scripts where noted.\n\n## SSE audio chat\nStreaming chat returns `text/event-stream` with events:\n- `text` — token/sentence payload (`text`, optional `finished` / `isFinal` / `limitInfo`)\n- `audio` — WAV base64 (`audio`, `mimeType`, `chunkIndex`, `isFinal`)\n- `error` — failure message\n- `end` — stream closed\n\nPostman shows the raw SSE body; desktop apps parse events for typewriter text + buffered playback.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "deviceId",
+      "value": ""
+    },
+    {
+      "key": "timezone",
+      "value": "Africa/Accra"
+    },
+    {
+      "key": "categoryId",
+      "value": ""
+    },
+    {
+      "key": "courseId",
+      "value": ""
+    },
+    {
+      "key": "lessonId",
+      "value": ""
+    },
+    {
+      "key": "s3Key",
+      "value": ""
+    },
+    {
+      "key": "sourceUrl",
+      "value": ""
+    },
+    {
+      "key": "pastQuestionPaperId",
+      "value": ""
+    },
+    {
+      "key": "pastQuestionItemId",
+      "value": ""
+    },
+    {
+      "key": "voiceId",
+      "value": ""
+    },
+    {
+      "key": "studentId",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Ensure device + timezone defaults exist for every request in this collection.",
+          "if (!pm.collectionVariables.get('timezone')) {",
+          "  pm.collectionVariables.set('timezone', 'UTC');",
+          "}",
+          "if (!pm.collectionVariables.get('deviceId')) {",
+          "  console.warn('Set collection variable deviceId to the signed-in user device_id.');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('Response time under 120s (AI routes can be slow)', function () {",
+          "  pm.expect(pm.response.responseTime).to.be.below(120000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Past Questions — Admin updates",
+      "description": "ADMIN only. New/changed: background/pre-seen on PATCH, reformat + verify-all with issues[], delete paper embeddings.",
+      "item": [
+        {
+          "name": "Update paper (incl. background / pre-seen)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}"
+              ]
+            },
+            "description": "Partial update. Trailing “Paper” / “Solutions” is stripped from `title` on save and in serialize.\n\n**New fields**\n- `backgroundHtml` — sanitized HTML for case-study / pre-seen material before Q1\n- `backgroundText` — plain text companion (derived from HTML when omitted)\n- Sets `hasBackground` when either field is non-empty\n\nOther optional fields: `categoryId`, `paperCode`, `sitting`, `level`, `year`, `status` (`ACTIVE`|`DEACTIVE`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Advanced Taxation\",\n  \"paperCode\": \"3.3\",\n  \"sitting\": \"July\",\n  \"level\": \"3\",\n  \"year\": 2026,\n  \"status\": \"ACTIVE\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"backgroundHtml\": \"<p>Case study: Assume you are the tax adviser to Horizon Ltd…</p>\",\n  \"backgroundText\": \"Case study: Assume you are the tax adviser to Horizon Ltd…\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Paper updated', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const paper = json.response || json;",
+                  "if (paper && paper._id) pm.collectionVariables.set('pastQuestionPaperId', String(paper._id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reformat one paper from PDF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/reformat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}",
+                "reformat"
+              ]
+            },
+            "description": "Re-reads the stored PDF with Gemini HTML extraction. Keeps question ids/order.\n\nBody:\n- `syncPlain` (boolean) — also rewrite plain-text fields from HTML and rebuild vectors when content changes\n\nResponse includes `updated`, `missing`, `mismatched`, `partial`, `hasBackground`, `backgroundUpdated`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncPlain\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reformat / verify all papers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/reformat-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "reformat-all"
+              ]
+            },
+            "description": "Starts a background job. Returns **202** when started, **409** if a run is already in progress.\n\nBody:\n- `onlyUnformatted` — default `true` (pending HTML only). Send `false` to **verify all** papers with PDFs\n- `syncPlain` — rewrite plain text from PDF HTML when true\n- `concurrency` — worker count 1–5 (default 3)\n\nJob state includes `issues[]`: papers with missing / mismatched / partial questions plus `hasBackground`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"onlyUnformatted\": false,\n  \"syncPlain\": true,\n  \"concurrency\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Accepted or already running', () => {",
+                  "  pm.expect([202, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reformat job status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/reformat-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "reformat-status"
+              ]
+            },
+            "description": "Poll while a reformat/verify job runs.\n\nResponse adds `papersPending`, `questionsFormatted`, plus job fields:\n`isRunning`, `done`, `total`, `needsReview`, `failed`, `errors[]`, `issues[]`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status ok', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const state = json.response || {};",
+                  "console.log('running=', state.isRunning, 'done=', state.done, '/', state.total, 'issues=', (state.issues||[]).length);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get / update past-question AI lifetime limit",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/ai-limit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "ai-limit"
+              ]
+            },
+            "description": "Reads global `pastQuestionLifetimeLimit` used by student chat quota."
+          }
+        },
+        {
+          "name": "Set past-question AI lifetime limit",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/ai-limit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "ai-limit"
+              ]
+            },
+            "description": "Body: `pastQuestionLifetimeLimit` (integer ≥ 1).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pastQuestionLifetimeLimit\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete paper embeddings only",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/embeddings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "past-questions",
+                "{{pastQuestionPaperId}}",
+                "embeddings"
+              ]
+            },
+            "description": "Removes Qdrant vectors for this paper without deleting the paper, questions, or PDF. Chat retrieval stops using this paper until reprocessed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Past Questions — Student updates",
+      "description": "USER or ADMIN + enrollment/subscription. New: AI quota, history, spoken chat SSE. Papers now serialize `backgroundHtml` / `backgroundText` / `hasBackground`; titles strip trailing Paper/Solutions.",
+      "item": [
+        {
+          "name": "AI quota",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/ai-quota",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "ai-quota"
+              ]
+            },
+            "description": "Lifetime past-question AI usage vs limit. Staff roles are unlimited. Used by desktop before chat."
+          }
+        },
+        {
+          "name": "Chat history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/history?paperId=%7B%7BpastQuestionPaperId%7D%7D",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "paperId",
+                  "value": "{{pastQuestionPaperId}}",
+                  "description": "Optional. Limit history to one paper ObjectId."
+                }
+              ]
+            },
+            "description": "Recent past-question chat turns for the signed-in student (up to 40)."
+          }
+        },
+        {
+          "name": "Get paper (includes background)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "{{pastQuestionPaperId}}"
+              ]
+            },
+            "description": "ACTIVE + SUCCESS papers only.\n\nResponse now includes:\n- `backgroundHtml`, `backgroundText`, `hasBackground`\n- `title` with trailing Paper/Solutions removed\n- `questions[]` with HTML fields when formatted"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Paper loaded', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const paper = json.response || {};",
+                  "if (paper._id) pm.collectionVariables.set('pastQuestionPaperId', String(paper._id));",
+                  "const q = (paper.questions || [])[0];",
+                  "if (q && q._id) pm.collectionVariables.set('pastQuestionItemId', String(q._id));",
+                  "console.log('hasBackground=', paper.hasBackground, 'questions=', (paper.questions||[]).length);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat (text)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/chat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "chat"
+              ]
+            },
+            "description": "JSON chat. Records `ai_query` student activity.\n\nScopes: `paper` (needs paperId), `question` (needs questionId), `course` (paperId or categoryId+level).\nRate limit: 10 req/min.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What are the main topics in this sitting?\",\n  \"scope\": \"paper\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"history\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Chat audio stream (text + TTS)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream",
+                "description": "Prefer SSE for streaming endpoints. Response events: text, audio, error, end."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/chat-audio-stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "chat-audio-stream"
+              ]
+            },
+            "description": "SSE stream. Same body as `/chat` plus optional `voiceId` / `voiceName`.\n\nBehaviour:\n1. Streams spoken plain-text tokens as `event: text` (for letter-by-letter UI)\n2. Compiles Gemini TTS per sentence as `event: audio` (WAV base64)\n3. Final `text` event may include HTML + `limitInfo`\n4. Ends with `event: end`\n\nUses the same lifetime quota as text chat. 10 req/min.\n\nIn Postman: send the request and inspect the raw body for `event:` / `data:` lines.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Explain how I should approach question 1 under exam conditions.\",\n  \"scope\": \"paper\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"voiceId\": \"{{voiceId}}\",\n  \"history\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('SSE accepted (200) or quota/auth error documented', () => {",
+                  "  pm.expect([200, 401, 403, 404, 429]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.text();",
+                  "  pm.test('Looks like SSE', () => {",
+                  "    pm.expect(body.includes('event:') || body.includes('data:')).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "TTS Voices — Admin",
+      "description": "ADMIN. Mounted at /v2/admin/gemini-ai/voices. Cloned voices use Gemini display_name (snake_case) on the provider side.",
+      "item": [
+        {
+          "name": "List voices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "voices"
+              ]
+            },
+            "description": "All admin voices (enabled and disabled), including prebuilt and replicated."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Voices listed', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const rows = json.response || [];",
+                  "const pick = rows.find(v => v.isDefault) || rows[0];",
+                  "if (pick && pick._id) pm.collectionVariables.set('voiceId', String(pick._id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create prebuilt voice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices/prebuilt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "voices",
+                "prebuilt"
+              ]
+            },
+            "description": "Body: `name` (display), `geminiVoice` (prebuilt Gemini name such as Aoede, Kore, Puck).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Classroom Aoede\",\n  \"geminiVoice\": \"Aoede\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (pm.response.code === 201 && json.response?._id) {",
+                  "  pm.collectionVariables.set('voiceId', String(json.response._id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Clone / replicate voice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices/replicate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "voices",
+                "replicate"
+              ]
+            },
+            "description": "Multipart clone. Do not set Content-Type manually.\n\nProvider field is `display_name` (snake_case). A 400 mentioning `voice.displayName` means an outdated client/server pairing — restart API after voice service updates.\n\nReturns 201 with the new voice document (`geminiVoice` like `voice_…`).",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Tutor Clone",
+                  "type": "text",
+                  "description": "Required display name shown in apps."
+                },
+                {
+                  "key": "source",
+                  "type": "file",
+                  "src": "",
+                  "description": "Required. Source speech sample (audio). Max ~30 MB."
+                },
+                {
+                  "key": "consent",
+                  "type": "file",
+                  "src": "",
+                  "description": "Required. Consent recording for voice cloning (provider requirement)."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update voice",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices/{{voiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "voices",
+                "{{voiceId}}"
+              ]
+            },
+            "description": "Optional body: `name`, `enabled`, `isDefault`. Setting default clears other defaults.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tutor Clone\",\n  \"enabled\": true,\n  \"isDefault\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete voice",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices/{{voiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "voices",
+                "{{voiceId}}"
+              ]
+            },
+            "description": "Deletes the voice. Replicated voices are also removed from Gemini when possible."
+          }
+        }
+      ]
+    },
+    {
+      "name": "TTS Voices — Student / desktop",
+      "description": "Enabled voices for chat audio replies.",
+      "item": [
+        {
+          "name": "List enabled voices (course AI)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/gemini-ai/voices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "gemini-ai",
+                "voices"
+              ]
+            },
+            "description": "Public list for desktop MSL AI voice picker. Saves first/default to `voiceId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Enabled voices', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const rows = json.response || [];",
+                  "const pick = rows.find(v => v.isDefault) || rows[0];",
+                  "if (pick && pick._id) pm.collectionVariables.set('voiceId', String(pick._id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List enabled voices (subscription AI)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/subscription-ai/voices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "subscription-ai",
+                "voices"
+              ]
+            },
+            "description": "Same shape for subscription AI chat voice picker."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Gemini AI — Audio text streams",
+      "description": "Desktop uses these for spoken replies. Text tokens stream immediately; TTS compiles per sentence for smooth playback.",
+      "item": [
+        {
+          "name": "Course AI — audio text stream",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream",
+                "description": "Prefer SSE for streaming endpoints. Response events: text, audio, error, end."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/gemini-ai/query-general-context-audio-text-stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "gemini-ai",
+                "query-general-context-audio-text-stream"
+              ]
+            },
+            "description": "**IN USE by desktop** (`geminiContextAudioStream`).\n\nBody: `question` (required), optional `courseId`, `lessonId`, `s3Keys[]`, `voiceId`, `voiceName`.\n\nSSE: fine-grained `text` events + parallel `audio` WAV chunks (`chunkIndex`, `isFinal`).\nCounts against course AI daily/monthly limits and records `ai_query` activity.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Summarise the key points I should revise today.\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"voiceId\": \"{{voiceId}}\",\n  \"s3Keys\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Course AI — text stream then final audio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream",
+                "description": "Prefer SSE for streaming endpoints. Response events: text, audio, error, end."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/gemini-ai/query-general-context-text-stream-final-audio",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "gemini-ai",
+                "query-general-context-text-stream-final-audio"
+              ]
+            },
+            "description": "Streams text first, then one final TTS WAV. Useful when you want uninterrupted speech after the full answer.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Give a short spoken overview of this lesson.\",\n  \"courseId\": \"{{courseId}}\",\n  \"voiceId\": \"{{voiceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Subscription AI — audio text stream",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream",
+                "description": "Prefer SSE for streaming endpoints. Response events: text, audio, error, end."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/subscription-ai/query-general-context-audio-text-stream",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "subscription-ai",
+                "query-general-context-audio-text-stream"
+              ]
+            },
+            "description": "Same SSE contract as course audio-text-stream, scoped to subscription materials / limits.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What should I focus on in my subscriber materials?\",\n  \"s3Keys\": [\n    \"{{s3Key}}\"\n  ],\n  \"voiceId\": \"{{voiceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Gemini Admin — Qdrant delete parity",
+      "description": "ADMIN. Create→delete counterparts for embeddings (process-from-url, filter delete, wipe collection).",
+      "item": [
+        {
+          "name": "Delete embeddings for URL (counterpart to process-from-url)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/process-from-url",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "process-from-url"
+              ]
+            },
+            "description": "Body: `url` (required). Deletes Qdrant points whose source URL matches exactly.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{sourceUrl}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete embeddings by filter",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/embeddings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "embeddings"
+              ]
+            },
+            "description": "Provide **at least one** of: `sourceUrl`|`url`, `s3Key`|`s3Keys`, `lessonId`, `courseId`.\nAlso clears matching `ProcessedLessonFile` rows when lesson/course/s3 filters are set.\nMay return **207** if Qdrant partially failed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceUrl\": \"{{sourceUrl}}\",\n  \"s3Key\": \"{{s3Key}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"courseId\": \"{{courseId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Embedding counts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "description": "JSON body. Omit for multipart/form-data so Postman can set the boundary."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/embeddings/counts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "embeddings",
+                "counts"
+              ]
+            },
+            "description": "Counts indexed passages for the given filter (admin tooling).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete entire Qdrant collection",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/collection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "collection"
+              ]
+            },
+            "description": "Destructive. Drops the Gemini AI Qdrant collection. Re-run embedding jobs afterwards."
+          }
+        },
+        {
+          "name": "All students AI usage (optimised)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/admin/gemini-ai/all-students-usage?page=1&limit=50&search=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "admin",
+                "gemini-ai",
+                "all-students-usage"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page ≥ 1."
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Page size 1–100 (default 50)."
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Optional name/email search."
+                }
+              ]
+            },
+            "description": "Admin AI usage dashboard. Response contract preserved; query path optimised (indexed cursor + aggregations, avoids loading full answers).\n\nUses course-source usage for the current month."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notes — non-HTTP / ops",
+      "description": "Documented for completeness; not all are HTTP routes.",
+      "item": [
+        {
+          "name": "Subscription invoice paymentReference index",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/subscription/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "subscription",
+                "status"
+              ]
+            },
+            "description": "Ops note (not a new route): unique sparse indexes on `paymentReference` treated many `null` values as duplicates (E11000).\n\nFix: unset null paymentReference values + partial unique index where `paymentReference` is a string.\nScript: `API-MONGODB/src/scripts/ensureSubscriptionInvoicePaymentReferenceIndex.ts`\n\nThis request simply hits subscription status so the folder is importable; run the script on the API host when deploying."
+          }
+        },
+        {
+          "name": "Student activity on AI queries",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Required. JWT from login / verify-device. Role must match the folder (USER and/or ADMIN)."
+              },
+              {
+                "key": "x-device-id",
+                "value": "{{deviceId}}",
+                "description": "Required. Must match the signed-in user's stored device_id. Missing or mismatched values return 403 (You've been logged out)."
+              },
+              {
+                "key": "x-timezone",
+                "value": "{{timezone}}",
+                "description": "Optional. IANA timezone such as Africa/Accra. Used for activity timestamps. Defaults to UTC when omitted."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v2/past-questions/ai-quota",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v2",
+                "past-questions",
+                "ai-quota"
+              ]
+            },
+            "description": "Behaviour change: past-question chat, course AI chat, and subscription AI chat call `recordStudentActivity(..., 'ai_query')` after a successful answer.\nNo dedicated endpoint — activity appears in gamification / student activity feeds."
+          }
+        }
+      ]
+    }
+  ]
+}

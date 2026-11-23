@@ -191,6 +191,16 @@ Router.patch(
   }
 );
 
+Router.put(
+  "/:id/timestamps",
+  authentification,
+  authorization([Roles.ADMIN]),
+  cacheInvalidation(["lesson", "course"]),
+  (req: Request, res: Response) => {
+    AdminLessonV2Controller.updateTimestamps(req, res);
+  }
+);
+
 Router.delete(
   "/:id",
   authentification,

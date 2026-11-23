@@ -6,7 +6,8 @@ const subscriptionResourceSchema = new Schema(
   {
     title: { type: String, required: true },
     description: { type: String, default: null },
-    thumbnail: { type: String, default: null },   
+    thumbnail: { type: String, default: null },
+    category: { type: String, default: null },
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
@@ -18,7 +19,11 @@ const subscriptionResourceSchema = new Schema(
       default: SubscriptionContentStatus.ACTIVE,
       required: true,
     },
-    authorId: {
+    archived: {
+      type: Boolean,
+      default: false,
+    },
+    author: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: false,

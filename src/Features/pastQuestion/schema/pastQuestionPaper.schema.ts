@@ -22,6 +22,10 @@ const pastQuestionPaperSchema = new Schema(
     fileUrl: { type: String, default: null },
     fileSizeMB: { type: Number, default: 0 },
     extractedText: { type: String, default: "" },
+    // Case-study / pre-seen material that appears before Question 1. Empty when the paper has none.
+    backgroundHtml: { type: String, default: "" },
+    backgroundText: { type: String, default: "" },
+    hasBackground: { type: Boolean, default: false },
     status: {
       type: String,
       enum: Object.values(PastQuestionStatus),

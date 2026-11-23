@@ -5,6 +5,7 @@ import { geminiChatModel } from "../../geminiAi/controllers/geminiAi.shared";
 /**
  * Reads a past-question PDF with Gemini and returns each question, suggested solution and
  * examiner note as HTML, so tables, lists and emphasis from the original paper survive.
+ * Also returns optional case-study / pre-seen material that appears before Question 1.
  */
 
 export type FormattedQuestion = {
@@ -13,6 +14,11 @@ export type FormattedQuestion = {
   answerHtml: string;
   answerNotesHtml: string;
   marks: number | null;
+};
+
+export type FormattedExtraction = {
+  backgroundHtml: string;
+  questions: FormattedQuestion[];
 };
 
 const ALLOWED_TAGS = [
@@ -36,21 +42,58 @@ const ALLOWED_TAGS = [
   "th",
   "td",
   "caption",
+  "colgroup",
+  "col",
   "h4",
   "h5",
   "blockquote",
+  "span",
+  "div",
+  "img",
+  "figure",
+  "figcaption",
 ];
 
-/** Allowlist-only HTML: no scripts, styles, links, images or event handlers. */
+const STYLE_FILTER: Record<string, RegExp[]> = {
+  color: [/^#(0x)?[0-9a-f]+$/i, /^rgb\(/i, /^rgba\(/i, /^hsl\(/i, /^[a-z]+$/i],
+  "background-color": [/^#(0x)?[0-9a-f]+$/i, /^rgb\(/i, /^rgba\(/i, /^transparent$/i],
+  "font-size": [/^\d+(\.\d+)?(px|pt|em|rem|%)$/i],
+  "font-weight": [/^(normal|bold|[1-9]00)$/i],
+  "font-style": [/^(normal|italic)$/i],
+  "text-align": [/^(left|right|center|justify)$/i],
+  "vertical-align": [/^(top|middle|bottom|baseline)$/i],
+  width: [/^\d+(\.\d+)?(px|pt|em|rem|%)$/i],
+  "min-width": [/^\d+(\.\d+)?(px|pt|em|rem|%)$/i],
+  "max-width": [/^\d+(\.\d+)?(px|pt|em|rem|%)$/i],
+  height: [/^\d+(\.\d+)?(px|pt|em|rem|%)$/i],
+  border: [/^[\w\s#%,.()/-]+$/i],
+  "border-collapse": [/^collapse$/i],
+  padding: [/^\d+(\.\d+)?(px|pt|em|rem|%)(\s+\d+(\.\d+)?(px|pt|em|rem|%)){0,3}$/i],
+  margin: [/^\d+(\.\d+)?(px|pt|em|rem|%)(\s+\d+(\.\d+)?(px|pt|em|rem|%)){0,3}$/i],
+};
+
+/** Allowlist-only HTML: no scripts, links, or event handlers. Limited inline styles and images. */
 export const sanitizeQuestionHtml = (html: unknown): string =>
   sanitizeHtml(String(html ?? ""), {
     allowedTags: ALLOWED_TAGS,
     allowedAttributes: {
-      th: ["colspan", "rowspan"],
-      td: ["colspan", "rowspan"],
+      th: ["colspan", "rowspan", "align", "valign", "width", "style", "class"],
+      td: ["colspan", "rowspan", "align", "valign", "width", "style", "class"],
+      col: ["span", "width", "style"],
       ol: ["type", "start"],
+      p: ["align", "style"],
+      div: ["align", "style", "class"],
+      span: ["style", "class"],
+      table: ["width", "border", "cellpadding", "cellspacing", "style", "class"],
+      img: ["src", "alt", "width", "height", "style"],
+      figure: ["style", "class"],
+      "*": ["style"],
     },
-    allowedSchemes: [],
+    allowedStyles: {
+      "*": STYLE_FILTER,
+    },
+    allowedSchemes: ["https", "http", "data"],
+    allowedSchemesAppliedToAttributes: ["src"],
     disallowedTagsMode: "discard",
   })
     .replace(/<p>\s*(?:<br\s*\/?>)?\s*<\/p>/gi, "")
@@ -73,7 +116,6 @@ export const htmlToPlainText = (html: unknown): string => {
   let text = String(html ?? "");
   if (!text.trim()) return "";
 
-  // Numbered lists get their numbers before the tags are stripped.
   text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_match, inner: string) => {
     let index = 0;
     return inner.replace(/<li[^>]*>/gi, () => `\n${(index += 1)}. `);
@@ -81,8 +123,9 @@ export const htmlToPlainText = (html: unknown): string => {
   text = text
     .replace(/<li[^>]*>/gi, "\n• ")
     .replace(/<\/(td|th)>\s*<(td|th)[^>]*>/gi, " | ")
-    .replace(/<\/(p|tr|li|ul|ol|table|caption|h4|h5|blockquote|thead|tbody)>/gi, "\n")
+    .replace(/<\/(p|tr|li|ul|ol|table|caption|h4|h5|blockquote|thead|tbody|figure|figcaption)>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<img[^>]*>/gi, " [figure] ")
     .replace(/<[^>]+>/g, "");
 
   return decodeEntities(text)
@@ -121,6 +164,14 @@ export const normaliseNumber = (value: unknown) =>
     .replace(/question|part/g, "")
     .replace(/[^a-z0-9]+/g, "");
 
+/** Strip trailing "Paper" / "Solutions" noise from exam titles. */
+export const normalizePaperTitle = (title: unknown) =>
+  String(title || "")
+    .replace(/\s+Solutions?\s*$/i, "")
+    .replace(/\s+Paper\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const parseJson = (raw: string) => {
   const cleaned = String(raw || "")
     .replace(/^```(?:json)?/i, "")
@@ -129,6 +180,15 @@ const parseJson = (raw: string) => {
   try {
     return JSON.parse(cleaned);
   } catch {
+    const objectStart = cleaned.indexOf("{");
+    const objectEnd = cleaned.lastIndexOf("}");
+    if (objectStart >= 0 && objectEnd > objectStart) {
+      try {
+        return JSON.parse(cleaned.slice(objectStart, objectEnd + 1));
+      } catch {
+        /* fall through to array */
+      }
+    }
     const start = cleaned.indexOf("[");
     const end = cleaned.lastIndexOf("]");
     if (start >= 0 && end > start) {
@@ -143,22 +203,36 @@ const parseJson = (raw: string) => {
 };
 
 const FORMAT_PROMPT = `You are digitising an exam past-question paper that has been supplied as a PDF.
-The paper contains questions, then (usually later) suggested solutions and examiner's comments.
-Return ONLY a JSON array (no markdown fences, no commentary). Each element is:
+The paper may start with additional information, background, or pre-seen material (a case study, scenario, exhibits, appendices, or company facts) BEFORE the numbered questions. Headings to look for include "Additional information", "Additional material", "Background", "Pre-seen", "Pre seen", and "Case study". Then it contains questions, then (usually later) suggested solutions and examiner's comments.
+Return ONLY JSON (no markdown fences, no commentary) with this shape:
 {
-  "number": "1(a)",
-  "questionHtml": "<p>...</p>",
-  "answerHtml": "<p>...</p>",
-  "answerNotesHtml": "<p>...</p>",
-  "marks": 5
+  "backgroundHtml": "<p>...</p>",
+  "questions": [
+    {
+      "number": "1(a)",
+      "questionHtml": "<p>...</p>",
+      "answerHtml": "<p>...</p>",
+      "answerNotesHtml": "<p>...</p>",
+      "marks": 5
+    }
+  ]
 }
+
+backgroundHtml rules:
+- Put ONLY material that appears before the first numbered question: additional information, background, pre-seen material, case studies, exhibits, company facts, and appendices the questions rely on.
+- Keep the section heading when the paper has one.
+- If the paper has no such material, return "".
+- Do NOT put numbered exam questions into backgroundHtml.
 
 HTML rules (important):
 - Reproduce the PDF content faithfully and completely. Do not summarise, shorten, reorder or correct it.
 - Keep every table as a real <table> with <thead>/<tbody>, <tr>, <th>, <td>. Use colspan/rowspan for merged cells. Keep all numbers, currency symbols, brackets and alignment-relevant empty cells exactly.
+- Prefer text-align via style or align attributes so columns that are right/centre aligned in the PDF stay that way. Paragraphs of prose may use style="text-align:justify".
 - Keep bullet lists as <ul><li>, numbered lists as <ol><li> (use type="a"/"i" for lettered/roman lists). Nested lists go inside the parent <li>.
 - Use <p> for paragraphs, <strong> for bold, <em> for italic, <u> for underline, <sub>/<sup> for subscripts and superscripts.
-- Never output images, styles, classes, links, scripts or any tag not listed above.
+- Preserve meaningful colour and font-size with limited inline style attributes when they appear in the paper (for example red loss figures, bold headings).
+- For figures/diagrams that are essential, include an <img> only when you can describe them as a short caption inside <figure><figcaption>…</figcaption></figure> if the image itself cannot be embedded. Prefer capturing tabular data as tables, not images.
+- Never output scripts, links, or event handlers.
 - Escape &, < and > as entities. Do not invent bullet glyphs; use list tags.
 - The question text must not include the suggested solution, and vice versa.
 - Put a question's mark allocation in "marks" as a number when given, else null.
@@ -170,6 +244,44 @@ const fenceHints = (hints: Array<{ number: string; question: string }>) =>
     .map((hint) => `- ${hint.number}: ${hint.question.replace(/\s+/g, " ").slice(0, 90)}`)
     .join("\n");
 
+const mapQuestions = (parsed: any[]): FormattedQuestion[] =>
+  parsed
+    .filter((row) => row && typeof row === "object")
+    .map((row: any, index: number) => ({
+      number: String(row.number || index + 1).trim(),
+      questionHtml: sanitizeQuestionHtml(row.questionHtml ?? row.question),
+      answerHtml: sanitizeQuestionHtml(row.answerHtml ?? row.answer),
+      answerNotesHtml: sanitizeQuestionHtml(row.answerNotesHtml ?? row.answerNotes),
+      marks:
+        row.marks === null ||
+        row.marks === undefined ||
+        row.marks === "" ||
+        Number.isNaN(Number(row.marks))
+          ? null
+          : Number(row.marks),
+    }))
+    .filter((row) => row.questionHtml);
+
+const BACKGROUND_HEADING =
+  /^(additional(?:\s+information|\s+material)?|background(?:\s+information|\s+material)?|pre[-\s]?seen(?:\s+material|\s+information)?|case\s*study)\b/i;
+
+/** If the model filed the opening material as a question, move it above Question 1. */
+const peelLeadingBackground = (
+  backgroundHtml: string,
+  questions: FormattedQuestion[]
+): { backgroundHtml: string; questions: FormattedQuestion[] } => {
+  if (String(backgroundHtml || "").trim() || !questions.length) {
+    return { backgroundHtml, questions };
+  }
+  const first = questions[0];
+  const number = String(first.number || "").trim();
+  const opening = htmlToPlainText(first.questionHtml).replace(/\s+/g, " ").trim().slice(0, 160);
+  const numberIsHeading = BACKGROUND_HEADING.test(number);
+  const textIsHeading = BACKGROUND_HEADING.test(opening) && !/^\d/.test(number);
+  if (!numberIsHeading && !textIsHeading) return { backgroundHtml, questions };
+  return { backgroundHtml: first.questionHtml, questions: questions.slice(1) };
+};
+
 /**
  * `hints` are the questions already stored for this paper. When given, Gemini is asked to return
  * exactly those numbers so the HTML can be matched to the existing records.
@@ -177,9 +289,9 @@ const fenceHints = (hints: Array<{ number: string; question: string }>) =>
 export const extractFormattedQuestionsFromPdf = async (
   pdf: Buffer,
   hints: Array<{ number: string; question: string }> = []
-): Promise<FormattedQuestion[]> => {
+): Promise<FormattedExtraction> => {
   const instruction = hints.length
-    ? `${FORMAT_PROMPT}\n\nThis paper already has these questions on record. Return exactly one element for each number below, in this order, using the same number strings, and no others. When a number is a whole question (for example "1"), return a single element that contains ALL of its parts (a), (b), (c)... together in order, and do not split it into 1(a), 1(b). This overrides the rule about lettered parts:\n${fenceHints(hints)}`
+    ? `${FORMAT_PROMPT}\n\nThis paper already has these questions on record. Return exactly one questions[] element for each number below, in this order, using the same number strings, and no others. When a number is a whole question (for example "1"), return a single element that contains ALL of its parts (a), (b), (c)... together in order, and do not split it into 1(a), 1(b). This overrides the rule about lettered parts. Still return backgroundHtml for any pre-seen / case-study material before Question 1:\n${fenceHints(hints)}`
     : FORMAT_PROMPT;
 
   const contents: Content[] = [
@@ -205,21 +317,18 @@ export const extractFormattedQuestionsFromPdf = async (
       },
     });
     parsed = parseJson(completion.response.text());
-    if (Array.isArray(parsed)) break;
+    if (Array.isArray(parsed) || (parsed && typeof parsed === "object")) break;
   }
-  if (!Array.isArray(parsed)) throw new Error("Gemini did not return a question list for this PDF");
 
-  return parsed
-    .filter((row) => row && typeof row === "object")
-    .map((row: any, index: number) => ({
-      number: String(row.number || index + 1).trim(),
-      questionHtml: sanitizeQuestionHtml(row.questionHtml ?? row.question),
-      answerHtml: sanitizeQuestionHtml(row.answerHtml ?? row.answer),
-      answerNotesHtml: sanitizeQuestionHtml(row.answerNotesHtml ?? row.answerNotes),
-      marks:
-        row.marks === null || row.marks === undefined || row.marks === "" || Number.isNaN(Number(row.marks))
-          ? null
-          : Number(row.marks),
-    }))
-    .filter((row) => row.questionHtml);
+  if (Array.isArray(parsed)) {
+    return peelLeadingBackground("", mapQuestions(parsed));
+  }
+  if (parsed && typeof parsed === "object") {
+    const row = parsed as Record<string, unknown>;
+    const questions = Array.isArray(row.questions) ? row.questions : [];
+    const backgroundSource =
+      row.backgroundHtml || row.additionalHtml || row.preSeenHtml || row.background || "";
+    return peelLeadingBackground(sanitizeQuestionHtml(backgroundSource), mapQuestions(questions as any[]));
+  }
+  throw new Error("Gemini did not return a question list for this PDF");
 };

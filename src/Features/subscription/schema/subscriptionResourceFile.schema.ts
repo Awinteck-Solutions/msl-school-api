@@ -12,7 +12,14 @@ const subscriptionResourceFileSchema = new Schema(
       ref: "SubscriptionResource",
       required: true,
     },
+    lesson: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SubscriptionResourceLesson",
+      default: null,
+    },
     fileKey: { type: String, required: true },
+    /** When true, DB/Qdrant cleanup runs but S3 object is not deleted (course-cloned media). */
+    sharedS3Key: { type: Boolean, default: false },
     fileName: { type: String, required: true },
     fileType: {
       type: String,
@@ -36,7 +43,11 @@ const subscriptionResourceFileSchema = new Schema(
 );
 
 subscriptionResourceFileSchema.index({ resource: 1, createdAt: -1 });
-subscriptionResourceFileSchema.index({ fileKey: 1 }, { unique: true });
+subscriptionResourceFileSchema.index({ lesson: 1, createdAt: -1 });
+subscriptionResourceFileSchema.index(
+  { resource: 1, fileKey: 1 },
+  { unique: true }
+);
 subscriptionResourceFileSchema.index({ status: 1, createdAt: -1 });
 
 const SubscriptionResourceFile = mongoose.model(
