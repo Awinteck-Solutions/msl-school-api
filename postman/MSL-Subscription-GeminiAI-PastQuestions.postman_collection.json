@@ -1,0 +1,4389 @@
+{
+  "info": {
+    "_postman_id": "msl-sub-gemini-pq-2026-11",
+    "name": "MSL — Subscription · Gemini AI · Past Questions",
+    "description": "# MSL API — Subscription, Gemini AI, Past Questions\n\nSingle Postman collection for the three surfaces used by desktop + web admin.\n\n## Setup\n1. Set `baseUrl` (no trailing slash), e.g. `http://localhost:4000`\n2. Set `token` (JWT) and `deviceId` (must match user.device_id)\n3. Optional: `timezone` (default Africa/Accra)\n\n## Headers (authenticated requests)\n| Header | Value |\n| --- | --- |\n| Authorization | Bearer {{token}} |\n| x-device-id | {{deviceId}} |\n| x-timezone | {{timezone}} |\n\n## Access\n- **Subscription (user)**: auth; AI routes also need active subscription\n- **Gemini AI (user)**: auth + active course enrollment\n- **Past Questions (user)**: auth + enrollment or active AI subscription\n- **Admin folders**: ADMIN role\n\n## SSE audio\nChat audio endpoints return `text/event-stream` with `text` (tokens), `audio` (WAV base64), `error`, `end`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "deviceId",
+      "value": ""
+    },
+    {
+      "key": "timezone",
+      "value": "Africa/Accra"
+    },
+    {
+      "key": "categoryId",
+      "value": ""
+    },
+    {
+      "key": "courseId",
+      "value": ""
+    },
+    {
+      "key": "lessonId",
+      "value": ""
+    },
+    {
+      "key": "s3Key",
+      "value": ""
+    },
+    {
+      "key": "sourceUrl",
+      "value": ""
+    },
+    {
+      "key": "studentId",
+      "value": ""
+    },
+    {
+      "key": "voiceId",
+      "value": ""
+    },
+    {
+      "key": "subscriptionResourceId",
+      "value": ""
+    },
+    {
+      "key": "fileId",
+      "value": ""
+    },
+    {
+      "key": "invoiceId",
+      "value": ""
+    },
+    {
+      "key": "reference",
+      "value": ""
+    },
+    {
+      "key": "planId",
+      "value": ""
+    },
+    {
+      "key": "pastQuestionPaperId",
+      "value": ""
+    },
+    {
+      "key": "pastQuestionItemId",
+      "value": ""
+    },
+    {
+      "key": "jobId",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('timezone')) pm.collectionVariables.set('timezone', 'UTC');",
+          "if (!pm.collectionVariables.get('deviceId')) {",
+          "  console.warn('Set deviceId to the signed-in user device_id before authenticated calls.');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Subscription",
+      "description": "Billing + subscriber corpus + subscription AI.",
+      "item": [
+        {
+          "name": "User",
+          "description": "Public plan + authenticated subscribe / resources / invoices. Mounted at /v2/subscription.",
+          "item": [
+            {
+              "name": "Get plan (public)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/plan",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "plan"
+                  ]
+                },
+                "description": "Public. Returns active subscription plan pricing and AI limits."
+              }
+            },
+            {
+              "name": "Status",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "status"
+                  ]
+                },
+                "description": "Current user's subscription state, period, and access flags."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status ok', () => pm.expect(pm.response.code).to.eql(200));",
+                      "const j = pm.response.json();",
+                      "const sub = j.response || j;",
+                      "if (sub?.lastInvoice) pm.collectionVariables.set('invoiceId', String(sub.lastInvoice));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List resources",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/resources?page=1&limit=50",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "resources"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page ≥ 1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50",
+                      "description": "Page size"
+                    }
+                  ]
+                },
+                "description": "ACTIVE corpus resources for subscribers."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const rows = j.response?.docs || j.response || j.data || [];",
+                      "const first = Array.isArray(rows) ? rows[0] : null;",
+                      "if (first?._id) pm.collectionVariables.set('subscriptionResourceId', String(first._id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get resource",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/resources/{{subscriptionResourceId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "resources",
+                    "{{subscriptionResourceId}}"
+                  ]
+                },
+                "description": "Single resource with files/media for the player."
+              }
+            },
+            {
+              "name": "Subscribe",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/subscribe",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "subscribe"
+                  ]
+                },
+                "description": "Creates/opens an invoice and Paystack authorization URL. May return existing open invoice."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const r = j.response || {};",
+                      "if (r.invoiceId || r.invoice?._id) pm.collectionVariables.set('invoiceId', String(r.invoiceId || r.invoice._id));",
+                      "if (r.reference || r.paymentReference) pm.collectionVariables.set('reference', String(r.reference || r.paymentReference));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "My invoices",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/invoices?page=1&limit=50",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "invoices"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50",
+                      "description": "Limit"
+                    }
+                  ]
+                },
+                "description": "Paginated invoices for the signed-in user."
+              }
+            },
+            {
+              "name": "Pay invoice",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/invoices/{{invoiceId}}/pay",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "invoices",
+                    "{{invoiceId}}",
+                    "pay"
+                  ]
+                },
+                "description": "Creates/refreshes Paystack payment for an open invoice."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const r = j.response || {};",
+                      "if (r.reference || r.paymentReference) pm.collectionVariables.set('reference', String(r.reference || r.paymentReference));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Verify payment",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/verify/{{reference}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "verify",
+                    "{{reference}}"
+                  ]
+                },
+                "description": "Verifies Paystack reference and activates subscription when paid."
+              }
+            },
+            {
+              "name": "Payment callback view",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/callback?reference={{reference}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "callback"
+                  ],
+                  "query": [
+                    {
+                      "key": "reference",
+                      "value": "{{reference}}",
+                      "description": "Paystack payment reference from redirect."
+                    }
+                  ]
+                },
+                "description": "Browser callback landing (HTML/JSON). No auth."
+              }
+            },
+            {
+              "name": "Paystack webhook",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "Paystack webhook JSON."
+                  },
+                  {
+                    "key": "x-paystack-signature",
+                    "value": "",
+                    "description": "HMAC signature from Paystack. Required in production."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/webhook",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "webhook"
+                  ]
+                },
+                "description": "Server webhook. Signature validated with PAYSTACK_SECRET. Do not call from the app.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"event\": \"charge.success\",\n  \"data\": {\n    \"reference\": \"{{reference}}\",\n    \"status\": \"success\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cancel",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription/cancel",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription",
+                    "cancel"
+                  ]
+                },
+                "description": "Cancels renewal / ends access per product rules (keeps period or stops now)."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subscription AI (user)",
+          "description": "Requires auth + active subscription. Mounted at /v2/subscription-ai. Rate limit 10/min on some chat routes.",
+          "item": [
+            {
+              "name": "List TTS voices",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/voices",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "voices"
+                  ]
+                },
+                "description": "Enabled voices for spoken replies."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const rows = pm.response.json().response || [];",
+                      "const pick = rows.find(v => v.isDefault) || rows[0];",
+                      "if (pick?._id) pm.collectionVariables.set('voiceId', String(pick._id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Context chat stream",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/query-general-context-stream",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "query-general-context-stream"
+                  ]
+                },
+                "description": "Plain text stream over subscription corpus. Body: question, optional s3Keys[], resourceId.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"Summarise the main ideas in my subscriber library\",\n  \"s3Keys\": [\n    \"{{s3Key}}\"\n  ],\n  \"resourceId\": \"{{subscriptionResourceId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Context audio text stream",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "text/event-stream",
+                    "description": "SSE: event types text | audio | error | end."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/query-general-context-audio-text-stream",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "query-general-context-audio-text-stream"
+                  ]
+                },
+                "description": "SSE: live text tokens + sentence TTS audio (WAV). Optional voiceId / voiceName. Records ai_query activity.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"Give a short spoken overview of my materials\",\n  \"s3Keys\": [\n    \"{{s3Key}}\"\n  ],\n  \"voiceId\": \"{{voiceId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Query image",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/query-image",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "query-image"
+                  ]
+                },
+                "description": "Multipart image Q&A against subscription context.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "src": "",
+                      "description": "Required image file."
+                    },
+                    {
+                      "key": "question",
+                      "type": "text",
+                      "value": "Explain this question",
+                      "description": "Required."
+                    },
+                    {
+                      "key": "resourceId",
+                      "type": "text",
+                      "value": "{{subscriptionResourceId}}",
+                      "description": "Optional scope."
+                    },
+                    {
+                      "key": "s3Keys",
+                      "type": "text",
+                      "value": "{{s3Key}}",
+                      "description": "Optional; repeat field for multiple keys."
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Voice to text",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/voice-to-text",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "voice-to-text"
+                  ]
+                },
+                "description": "Transcribes mic recording for chat input.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "audio",
+                      "type": "file",
+                      "src": "",
+                      "description": "audio/* or video/webm."
+                    },
+                    {
+                      "key": "languageCode",
+                      "type": "text",
+                      "value": "en-US",
+                      "description": "Optional BCP-47 code."
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "History",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/history?limit=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20",
+                      "description": "Optional page size."
+                    }
+                  ]
+                },
+                "description": "Chat history for subscription AI."
+              }
+            },
+            {
+              "name": "Recent activity",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/recent-activity",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "recent-activity"
+                  ]
+                },
+                "description": "Non-chat generations (summaries, flashcards, quizzes)."
+              }
+            },
+            {
+              "name": "Summarize",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/summarize",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "summarize"
+                  ]
+                },
+                "description": "Starts async summarize job. Poll generation-status with jobId.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"s3Keys\": [\n    \"{{s3Key}}\"\n  ],\n  \"resourceId\": \"{{subscriptionResourceId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const id = j.response?.jobId || j.jobId;",
+                      "if (id) pm.collectionVariables.set('jobId', String(id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Generate flashcards",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/generate-flashcards",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "generate-flashcards"
+                  ]
+                },
+                "description": "Async flashcard generation.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"s3Keys\": [\n    \"{{s3Key}}\"\n  ],\n  \"count\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Generate quiz",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/generate-quiz",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "generate-quiz"
+                  ]
+                },
+                "description": "Async quiz generation.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"s3Keys\": [\n    \"{{s3Key}}\"\n  ],\n  \"numQuestions\": 5\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Generation status",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/generation-status?jobId={{jobId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "generation-status"
+                  ],
+                  "query": [
+                    {
+                      "key": "jobId",
+                      "value": "{{jobId}}",
+                      "description": "Job id from summarize/flashcards/quiz."
+                    }
+                  ]
+                },
+                "description": "Poll until status ready / failed."
+              }
+            },
+            {
+              "name": "Summaries history",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/summaries",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "summaries"
+                  ]
+                },
+                "description": "Past summaries."
+              }
+            },
+            {
+              "name": "Flashcards history",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/flashcards",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "flashcards"
+                  ]
+                },
+                "description": "Past flashcard jobs."
+              }
+            },
+            {
+              "name": "Quizzes history",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/subscription-ai/quizzes",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "subscription-ai",
+                    "quizzes"
+                  ]
+                },
+                "description": "Past quiz jobs."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin",
+          "description": "ADMIN. Mounted at /v2/admin/subscription.",
+          "item": [
+            {
+              "name": "Get plan",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/plan",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "plan"
+                  ]
+                },
+                "description": "Admin plan document(s) / active plan config."
+              }
+            },
+            {
+              "name": "Update plan",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/plan",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "plan"
+                  ]
+                },
+                "description": "Updates the active plan pricing and AI limits.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 5000,\n  \"currency\": \"NGN\",\n  \"intervalDays\": 30,\n  \"gracePeriodDays\": 7,\n  \"reminderDaysBeforeExpiry\": 3,\n  \"dailyAiLimit\": 10,\n  \"monthlyAiLimit\": 100,\n  \"isActive\": true,\n  \"description\": \"Monthly AI subscription\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Create plan model",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/plans",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "plans"
+                  ]
+                },
+                "description": "Creates an additional plan document when multi-plan is enabled.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": 5000,\n  \"currency\": \"NGN\",\n  \"intervalDays\": 30,\n  \"isActive\": true,\n  \"description\": \"New plan\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const id = j.response?._id || j.response?.id;",
+                      "if (id) pm.collectionVariables.set('planId', String(id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List subscriptions",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription?page=1&limit=50&status=&email=&userId=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50",
+                      "description": "Limit"
+                    },
+                    {
+                      "key": "status",
+                      "value": "",
+                      "description": "Optional status filter"
+                    },
+                    {
+                      "key": "email",
+                      "value": "",
+                      "description": "Optional email search"
+                    },
+                    {
+                      "key": "userId",
+                      "value": "",
+                      "description": "Optional user ObjectId"
+                    }
+                  ]
+                },
+                "description": "Paginated subscriber list."
+              }
+            },
+            {
+              "name": "Grant subscription",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/grant",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "grant"
+                  ]
+                },
+                "description": "Manually grant access. Body fields depend on admin controller (userId / email + days).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": \"{{studentId}}\",\n  \"days\": 30\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "List invoices",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/invoices?page=1&limit=50&status=&email=&userId=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "invoices"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50",
+                      "description": "Limit"
+                    },
+                    {
+                      "key": "status",
+                      "value": "",
+                      "description": "OPEN | PAID | VOID etc."
+                    },
+                    {
+                      "key": "email",
+                      "value": "",
+                      "description": "Optional"
+                    },
+                    {
+                      "key": "userId",
+                      "value": "",
+                      "description": "Optional"
+                    }
+                  ]
+                },
+                "description": "Admin invoice browser. paymentReference uniqueness is partial (string only)."
+              }
+            },
+            {
+              "name": "List resources",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/resources?page=1&limit=50&status=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "resources"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50",
+                      "description": "Limit"
+                    },
+                    {
+                      "key": "status",
+                      "value": "",
+                      "description": "Optional ACTIVE/DEACTIVE"
+                    }
+                  ]
+                },
+                "description": "Admin corpus resources."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const rows = j.response?.docs || j.response || [];",
+                      "const first = Array.isArray(rows) ? rows[0] : null;",
+                      "if (first?._id) pm.collectionVariables.set('subscriptionResourceId', String(first._id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Create resource",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/resources",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "resources"
+                  ]
+                },
+                "description": "Multipart create. Do not set Content-Type.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "upload",
+                      "type": "file",
+                      "src": "",
+                      "description": "Optional thumbnail"
+                    },
+                    {
+                      "key": "title",
+                      "type": "text",
+                      "value": "ICAG Study Pack",
+                      "description": "Required"
+                    },
+                    {
+                      "key": "desc",
+                      "type": "text",
+                      "value": "Shared AI corpus",
+                      "description": "Optional"
+                    },
+                    {
+                      "key": "category",
+                      "type": "text",
+                      "value": "{{categoryId}}",
+                      "description": "Optional category id"
+                    },
+                    {
+                      "key": "status",
+                      "type": "text",
+                      "value": "ACTIVE",
+                      "description": "ACTIVE | DEACTIVE"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Upload resource files",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/resources/{{subscriptionResourceId}}/files",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "resources",
+                    "{{subscriptionResourceId}}",
+                    "files"
+                  ]
+                },
+                "description": "Upload corpus files under a resource.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "files",
+                      "type": "file",
+                      "src": "",
+                      "description": "PDF / video / audio. Repeat field for multiple (max 10)."
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Process from URL",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/resources/{{subscriptionResourceId}}/process-from-url",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "resources",
+                    "{{subscriptionResourceId}}",
+                    "process-from-url"
+                  ]
+                },
+                "description": "Embed a remote PDF/URL into the subscription Qdrant collection.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"sourceUrl\": \"{{sourceUrl}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Processing status",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/resources/processing-status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "resources",
+                    "processing-status"
+                  ]
+                },
+                "description": "Background embedding job status for subscription resources."
+              }
+            },
+            {
+              "name": "AI limits",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/ai/limits",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "ai",
+                    "limits"
+                  ]
+                },
+                "description": "Subscription AI daily/monthly limits."
+              }
+            },
+            {
+              "name": "Update AI limits",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/ai/limits",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "ai",
+                    "limits"
+                  ]
+                },
+                "description": "Update subscription AI caps.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"dailyAiLimit\": 10,\n  \"monthlyAiLimit\": 100\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "All AI usage",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/subscription/ai/usage?page=1&limit=50&studentId={{studentId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "subscription",
+                    "ai",
+                    "usage"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50",
+                      "description": "Limit"
+                    },
+                    {
+                      "key": "studentId",
+                      "value": "{{studentId}}",
+                      "description": "Optional filter"
+                    }
+                  ]
+                },
+                "description": "Subscription-source AI usage listing."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Gemini AI",
+      "description": "Course-enrollment AI chat, generations, admin embeddings & voices.",
+      "item": [
+        {
+          "name": "User (course AI)",
+          "description": "Requires auth + active course enrollment. Mounted at /v2/gemini-ai.",
+          "item": [
+            {
+              "name": "List TTS voices",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/voices",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "voices"
+                  ]
+                },
+                "description": "Enabled voices for desktop course AI."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const rows = pm.response.json().response || [];",
+                      "const pick = rows.find(v => v.isDefault) || rows[0];",
+                      "if (pick?._id) pm.collectionVariables.set('voiceId', String(pick._id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Context chat stream (desktop)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/query-general-context-stream",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "query-general-context-stream"
+                  ]
+                },
+                "description": "IN-USE desktop text stream. Scope with courseId / lessonId / s3Keys.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"Explain this topic step by step\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Context audio text stream (desktop)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "text/event-stream",
+                    "description": "SSE: event types text | audio | error | end."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/query-general-context-audio-text-stream",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "query-general-context-audio-text-stream"
+                  ]
+                },
+                "description": "IN-USE desktop spoken chat. SSE text tokens + parallel TTS WAV chunks. voiceId optional.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"Give a short spoken summary\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"voiceId\": \"{{voiceId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Text stream then final audio",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "text/event-stream",
+                    "description": "SSE: event types text | audio | error | end."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/query-general-context-text-stream-final-audio",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "query-general-context-text-stream-final-audio"
+                  ]
+                },
+                "description": "Streams text first, then one final TTS clip.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"Speak a concise overview\",\n  \"courseId\": \"{{courseId}}\",\n  \"voiceId\": \"{{voiceId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Query image (desktop)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/query-image",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "query-image"
+                  ]
+                },
+                "description": "Multipart image Q&A with course context.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "image",
+                      "type": "file",
+                      "src": "",
+                      "description": "Required image"
+                    },
+                    {
+                      "key": "question",
+                      "type": "text",
+                      "value": "Solve this past question",
+                      "description": "Required"
+                    },
+                    {
+                      "key": "courseId",
+                      "type": "text",
+                      "value": "{{courseId}}",
+                      "description": "Optional"
+                    },
+                    {
+                      "key": "lessonId",
+                      "type": "text",
+                      "value": "{{lessonId}}",
+                      "description": "Optional"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Voice to text (desktop)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/voice-to-text",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "voice-to-text"
+                  ]
+                },
+                "description": "Transcription for mic → chat input.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "audio",
+                      "type": "file",
+                      "src": "",
+                      "description": "audio/* or video/webm"
+                    },
+                    {
+                      "key": "languageCode",
+                      "type": "text",
+                      "value": "en-US",
+                      "description": "Optional"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "History",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/history?courseId={{courseId}}&lessonId={{lessonId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "courseId",
+                      "value": "{{courseId}}",
+                      "description": "Optional scope"
+                    },
+                    {
+                      "key": "lessonId",
+                      "value": "{{lessonId}}",
+                      "description": "Optional scope"
+                    }
+                  ]
+                },
+                "description": "Course AI chat history."
+              }
+            },
+            {
+              "name": "Recent activity",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/recent-activity",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "recent-activity"
+                  ]
+                },
+                "description": "Non-chat AI activity."
+              }
+            },
+            {
+              "name": "Summarize",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/summarize",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "summarize"
+                  ]
+                },
+                "description": "Async summarize job.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"s3Keys\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const id = pm.response.json().response?.jobId || pm.response.json().jobId;",
+                      "if (id) pm.collectionVariables.set('jobId', String(id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Generate flashcards",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/generate-flashcards",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "generate-flashcards"
+                  ]
+                },
+                "description": "Async flashcards.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"count\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Generate quiz",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/generate-quiz",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "generate-quiz"
+                  ]
+                },
+                "description": "Async quiz.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"numQuestions\": 5\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Generation status",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/gemini-ai/generation-status?jobId={{jobId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "gemini-ai",
+                    "generation-status"
+                  ],
+                  "query": [
+                    {
+                      "key": "jobId",
+                      "value": "{{jobId}}",
+                      "description": "Job id"
+                    }
+                  ]
+                },
+                "description": "Poll job status."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin",
+          "description": "ADMIN. Mounted at /v2/admin/gemini-ai — voices, embeddings, limits, usage.",
+          "item": [
+            {
+              "name": "List voices",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "voices"
+                  ]
+                },
+                "description": "All voices including disabled."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const rows = pm.response.json().response || [];",
+                      "const pick = rows.find(v => v.isDefault) || rows[0];",
+                      "if (pick?._id) pm.collectionVariables.set('voiceId', String(pick._id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Create prebuilt voice",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices/prebuilt",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "voices",
+                    "prebuilt"
+                  ]
+                },
+                "description": "name + geminiVoice (Aoede, Kore, Puck, …).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Classroom Aoede\",\n  \"geminiVoice\": \"Aoede\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Clone voice",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices/replicate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "voices",
+                    "replicate"
+                  ]
+                },
+                "description": "Multipart clone. Provider uses display_name (snake_case).",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "name",
+                      "type": "text",
+                      "value": "Tutor Clone",
+                      "description": "Display name"
+                    },
+                    {
+                      "key": "source",
+                      "type": "file",
+                      "src": "",
+                      "description": "Source speech sample"
+                    },
+                    {
+                      "key": "consent",
+                      "type": "file",
+                      "src": "",
+                      "description": "Consent recording"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update voice",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices/{{voiceId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "voices",
+                    "{{voiceId}}"
+                  ]
+                },
+                "description": "Optional name, enabled, isDefault.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"enabled\": true,\n  \"isDefault\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete voice",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/voices/{{voiceId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "voices",
+                    "{{voiceId}}"
+                  ]
+                },
+                "description": "Deletes voice; replicated voices removed from Gemini when possible."
+              }
+            },
+            {
+              "name": "Process from URL",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/process-from-url",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "process-from-url"
+                  ]
+                },
+                "description": "Embed a single URL into the course Gemini collection.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"url\": \"{{sourceUrl}}\",\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete embeddings for URL",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/process-from-url",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "process-from-url"
+                  ]
+                },
+                "description": "Counterpart delete for process-from-url.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"url\": \"{{sourceUrl}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete embeddings by filter",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/embeddings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "embeddings"
+                  ]
+                },
+                "description": "At least one of sourceUrl|url, s3Key|s3Keys, lessonId, courseId.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"sourceUrl\": \"{{sourceUrl}}\",\n  \"s3Key\": \"{{s3Key}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"courseId\": \"{{courseId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Embedding counts",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/embeddings/counts",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "embeddings",
+                    "counts"
+                  ]
+                },
+                "description": "Count indexed passages for filters.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"courseId\": \"{{courseId}}\",\n  \"lessonId\": \"{{lessonId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Collection info",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/collection-info",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "collection-info"
+                  ]
+                },
+                "description": "Qdrant collection metadata."
+              }
+            },
+            {
+              "name": "Delete collection",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/collection",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "collection"
+                  ]
+                },
+                "description": "Destructive wipe of Gemini AI Qdrant collection."
+              }
+            },
+            {
+              "name": "Global limits",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/global-limits",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "global-limits"
+                  ]
+                },
+                "description": "Daily/monthly AI limits (+ pastQuestionLifetimeLimit on same doc when present)."
+              }
+            },
+            {
+              "name": "Update global limits",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/global-limits",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "global-limits"
+                  ]
+                },
+                "description": "Update GlobalAiLimit fields.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"dailyLimit\": 10,\n  \"monthlyLimit\": 100\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "All students usage",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/all-students-usage?page=1&limit=50&search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "all-students-usage"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "≥ 1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50",
+                      "description": "1–100"
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "description": "Optional name/email"
+                    }
+                  ]
+                },
+                "description": "Optimised monthly usage dashboard (course source)."
+              }
+            },
+            {
+              "name": "Student usage",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/gemini-ai/student-usage/{{studentId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "gemini-ai",
+                    "student-usage",
+                    "{{studentId}}"
+                  ]
+                },
+                "description": "Per-student usage breakdown."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Past Questions",
+      "description": "Past paper browse/chat + admin upload/reformat/background.",
+      "item": [
+        {
+          "name": "User",
+          "description": "Auth + enrollment or active AI subscription. /v2/past-questions",
+          "item": [
+            {
+              "name": "Browse tree",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/past-questions?categoryId={{categoryId}}&year=&level=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "past-questions"
+                  ],
+                  "query": [
+                    {
+                      "key": "categoryId",
+                      "value": "{{categoryId}}",
+                      "description": "Optional"
+                    },
+                    {
+                      "key": "year",
+                      "value": "",
+                      "description": "Optional year"
+                    },
+                    {
+                      "key": "level",
+                      "value": "",
+                      "description": "Optional level"
+                    }
+                  ]
+                },
+                "description": "ACTIVE + SUCCESS papers only."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Tree ok', () => pm.expect(pm.response.code).to.eql(200));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AI quota",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/past-questions/ai-quota",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "past-questions",
+                    "ai-quota"
+                  ]
+                },
+                "description": "Lifetime past-question AI quota."
+              }
+            },
+            {
+              "name": "Chat history",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/past-questions/history?paperId={{pastQuestionPaperId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "past-questions",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "paperId",
+                      "value": "{{pastQuestionPaperId}}",
+                      "description": "Optional filter"
+                    }
+                  ]
+                },
+                "description": "Up to 40 chat turns."
+              }
+            },
+            {
+              "name": "Get paper",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "past-questions",
+                    "{{pastQuestionPaperId}}"
+                  ]
+                },
+                "description": "Includes backgroundHtml/Text, hasBackground, stripped title, questions[]."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const paper = pm.response.json().response || {};",
+                      "if (paper._id) pm.collectionVariables.set('pastQuestionPaperId', String(paper._id));",
+                      "const q = (paper.questions || [])[0];",
+                      "if (q?._id) pm.collectionVariables.set('pastQuestionItemId', String(q._id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Paper insights",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/past-questions/{{pastQuestionPaperId}}/insights",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "past-questions",
+                    "{{pastQuestionPaperId}}",
+                    "insights"
+                  ]
+                },
+                "description": "This sitting + course insight + topic frequency."
+              }
+            },
+            {
+              "name": "Course insights",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/past-questions/insights?categoryId={{categoryId}}&level=2&paperCode=2.1&title=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "past-questions",
+                    "insights"
+                  ],
+                  "query": [
+                    {
+                      "key": "categoryId",
+                      "value": "{{categoryId}}",
+                      "description": "Required"
+                    },
+                    {
+                      "key": "level",
+                      "value": "2",
+                      "description": "Required"
+                    },
+                    {
+                      "key": "paperCode",
+                      "value": "2.1",
+                      "description": "Optional"
+                    },
+                    {
+                      "key": "title",
+                      "value": "",
+                      "description": "Optional if paperCode set"
+                    }
+                  ]
+                },
+                "description": "Course-level insight bundle."
+              }
+            },
+            {
+              "name": "Chat (paper)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/past-questions/chat",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "past-questions",
+                    "chat"
+                  ]
+                },
+                "description": "JSON chat. scope paper|question|course. 10/min. Records ai_query.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"What are the main topics in this sitting?\",\n  \"scope\": \"paper\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"history\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Chat (question)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/past-questions/chat",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "past-questions",
+                    "chat"
+                  ]
+                },
+                "description": "questionId required for question scope.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"How should I structure this answer?\",\n  \"scope\": \"question\",\n  \"questionId\": \"{{pastQuestionItemId}}\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"history\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Chat audio stream",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "text/event-stream",
+                    "description": "SSE: event types text | audio | error | end."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/past-questions/chat-audio-stream",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "past-questions",
+                    "chat-audio-stream"
+                  ]
+                },
+                "description": "SSE spoken chat: text tokens + TTS WAV. Same quota as /chat. Optional voiceId.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"Explain the approach under exam conditions.\",\n  \"scope\": \"paper\",\n  \"paperId\": \"{{pastQuestionPaperId}}\",\n  \"voiceId\": \"{{voiceId}}\",\n  \"history\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('SSE or documented error', () => pm.expect([200,401,403,404,429]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Admin",
+          "description": "ADMIN. /v2/admin/past-questions — upload, background edit, reformat/verify, embeddings delete.",
+          "item": [
+            {
+              "name": "Upload paper",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions"
+                  ]
+                },
+                "description": "Creates paper and starts extraction. 201.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "",
+                      "description": "Required PDF ≤ 80MB"
+                    },
+                    {
+                      "key": "categoryId",
+                      "type": "text",
+                      "value": "{{categoryId}}",
+                      "description": "Required"
+                    },
+                    {
+                      "key": "year",
+                      "type": "text",
+                      "value": "2026",
+                      "description": "Required"
+                    },
+                    {
+                      "key": "level",
+                      "type": "text",
+                      "value": "2",
+                      "description": "Required"
+                    },
+                    {
+                      "key": "title",
+                      "type": "text",
+                      "value": "Financial Reporting",
+                      "description": "Required"
+                    },
+                    {
+                      "key": "sitting",
+                      "type": "text",
+                      "value": "July",
+                      "description": "Optional"
+                    },
+                    {
+                      "key": "paperCode",
+                      "type": "text",
+                      "value": "2.1",
+                      "description": "Optional"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const paper = pm.response.json().response || {};",
+                      "if (paper._id) pm.collectionVariables.set('pastQuestionPaperId', String(paper._id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List papers",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions?categoryId={{categoryId}}&year=&level=&processStatus=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions"
+                  ],
+                  "query": [
+                    {
+                      "key": "categoryId",
+                      "value": "{{categoryId}}",
+                      "description": "Optional"
+                    },
+                    {
+                      "key": "year",
+                      "value": "",
+                      "description": "Optional"
+                    },
+                    {
+                      "key": "level",
+                      "value": "",
+                      "description": "Optional"
+                    },
+                    {
+                      "key": "processStatus",
+                      "value": "",
+                      "description": "PENDING|PROCESSING|SUCCESS|FAILED"
+                    }
+                  ]
+                },
+                "description": "Admin tree including pending/failed."
+              }
+            },
+            {
+              "name": "Get paper",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "{{pastQuestionPaperId}}"
+                  ]
+                },
+                "description": "Paper + questions (any process status)."
+              }
+            },
+            {
+              "name": "Update metadata + background",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "{{pastQuestionPaperId}}"
+                  ]
+                },
+                "description": "Partial update. backgroundHtml/Text set hasBackground. Title strips trailing Paper/Solutions.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Advanced Taxation\",\n  \"paperCode\": \"3.3\",\n  \"sitting\": \"July\",\n  \"level\": \"3\",\n  \"year\": 2026,\n  \"status\": \"ACTIVE\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"backgroundHtml\": \"<p>Pre-seen case study before Question 1.</p>\",\n  \"backgroundText\": \"Pre-seen case study before Question 1.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Replace questions",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/questions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "{{pastQuestionPaperId}}",
+                    "questions"
+                  ]
+                },
+                "description": "Replaces all questions; regenerates vectors/insights.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"questions\": [\n    {\n      \"number\": \"1\",\n      \"question\": \"Discuss revenue recognition.\",\n      \"answer\": \"Suggested solution…\",\n      \"answerNotes\": \"Examiner note…\",\n      \"marks\": 20\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Reprocess PDF",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/process",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "{{pastQuestionPaperId}}",
+                    "process"
+                  ]
+                },
+                "description": "Re-run extraction. 202 if already running."
+              }
+            },
+            {
+              "name": "Reformat one paper",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/reformat",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "{{pastQuestionPaperId}}",
+                    "reformat"
+                  ]
+                },
+                "description": "PDF → HTML fidelity keep ids. Returns missing/mismatched/partial.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"syncPlain\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Reformat / verify all",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/reformat-all",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "reformat-all"
+                  ]
+                },
+                "description": "Background job. onlyUnformatted:false verifies all PDFs. 202|409.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"onlyUnformatted\": false,\n  \"syncPlain\": true,\n  \"concurrency\": 3\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Accepted or busy', () => pm.expect([202,409]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Reformat status",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/reformat-status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "reformat-status"
+                  ]
+                },
+                "description": "Poll issues[], errors[], papersPending, questionsFormatted."
+              }
+            },
+            {
+              "name": "Get AI limit",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/ai-limit",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "ai-limit"
+                  ]
+                },
+                "description": "pastQuestionLifetimeLimit."
+              }
+            },
+            {
+              "name": "Set AI limit",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "JSON body. Do not set for multipart — Postman adds the boundary."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/ai-limit",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "ai-limit"
+                  ]
+                },
+                "description": "Integer ≥ 1.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"pastQuestionLifetimeLimit\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete embeddings only",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}/embeddings",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "{{pastQuestionPaperId}}",
+                    "embeddings"
+                  ]
+                },
+                "description": "Remove Qdrant vectors; keep paper/PDF/questions."
+              }
+            },
+            {
+              "name": "Delete paper",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}",
+                    "description": "Required unless noted public. JWT from login / device verify. Role must match the folder."
+                  },
+                  {
+                    "key": "x-device-id",
+                    "value": "{{deviceId}}",
+                    "description": "Required for authenticated app routes. Must match the user's stored device_id or API returns 403."
+                  },
+                  {
+                    "key": "x-timezone",
+                    "value": "{{timezone}}",
+                    "description": "Optional IANA timezone (e.g. Africa/Accra). Used for activity timestamps. Defaults to UTC."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v2/admin/past-questions/{{pastQuestionPaperId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v2",
+                    "admin",
+                    "past-questions",
+                    "{{pastQuestionPaperId}}"
+                  ]
+                },
+                "description": "Deletes paper, questions, insights, S3 file, vectors."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

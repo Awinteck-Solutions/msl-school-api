@@ -187,9 +187,10 @@ Router.get("/recent-activity", (req: Request, res: Response) => {
   GeminiAiV2Controller.nonChatHistory(req, res);
 });
 
-Router.get("/generation-status", (req: Request, res: Response) => {
-  GeminiAiV2Controller.generationStatus(req, res);
-});
+// Async poll endpoint — disabled while mobile uses sync generate-* responses.
+// Router.get("/generation-status", (req: Request, res: Response) => {
+//   GeminiAiV2Controller.generationStatus(req, res);
+// });
 
 Router.get("/summaries", (req: Request, res: Response) => {
   GeminiAiV2Controller.summarizeHistory(req, res);

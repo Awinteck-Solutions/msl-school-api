@@ -22,7 +22,8 @@ import {
 } from "./geminiAi.shared";
 import AiUsage from "../../mslAi/schema/aiUsage.schema";
 import { recordStudentActivity } from "../../gamification/service/gamification.service";
-import { enqueueGeneration, generationStatus as readGenerationStatus } from "../generationJob.service";
+// Async job helpers — re-enable with generationStatus / enqueueGeneration wrappers below.
+// import { enqueueGeneration, generationStatus as readGenerationStatus } from "../generationJob.service";
 import { resolveTtsVoice } from "./aiVoice.service";
 
 interface MulterRequest extends Request {
@@ -1180,35 +1181,49 @@ export class GeminiAiV2Controller {
     }
   }
 
-  static generationStatus(req: Request, res: Response) {
-    return readGenerationStatus(req, res, "course");
-  }
+  // Async job + poll flow (desktop). Mobile expects data in the generate response — kept for later.
+  // static generationStatus(req: Request, res: Response) {
+  //   return readGenerationStatus(req, res, "course");
+  // }
+  //
+  // static summarize(req: Request, res: Response) {
+  //   return enqueueGeneration(
+  //     req,
+  //     res,
+  //     { source: "course", queryType: "summarize", label: "Summary" },
+  //     (jobReq, jobRes) => GeminiAiV2Controller.runSummarize(jobReq, jobRes)
+  //   );
+  // }
+  //
+  // static generateFlashcards(req: Request, res: Response) {
+  //   return enqueueGeneration(
+  //     req,
+  //     res,
+  //     { source: "course", queryType: "generate-flashcards", label: "Flashcards" },
+  //     (jobReq, jobRes) => GeminiAiV2Controller.runGenerateFlashcards(jobReq, jobRes)
+  //   );
+  // }
+  //
+  // static generateQuiz(req: Request, res: Response) {
+  //   return enqueueGeneration(
+  //     req,
+  //     res,
+  //     { source: "course", queryType: "generate-quiz", label: "Quiz" },
+  //     (jobReq, jobRes) => GeminiAiV2Controller.runGenerateQuiz(jobReq, jobRes)
+  //   );
+  // }
 
+  /** Sync — mobile expects summary/flashcards/quiz in this response (not jobId + poll). */
   static summarize(req: Request, res: Response) {
-    return enqueueGeneration(
-      req,
-      res,
-      { source: "course", queryType: "summarize", label: "Summary" },
-      (jobReq, jobRes) => GeminiAiV2Controller.runSummarize(jobReq, jobRes)
-    );
+    return GeminiAiV2Controller.runSummarize(req, res);
   }
 
   static generateFlashcards(req: Request, res: Response) {
-    return enqueueGeneration(
-      req,
-      res,
-      { source: "course", queryType: "generate-flashcards", label: "Flashcards" },
-      (jobReq, jobRes) => GeminiAiV2Controller.runGenerateFlashcards(jobReq, jobRes)
-    );
+    return GeminiAiV2Controller.runGenerateFlashcards(req, res);
   }
 
   static generateQuiz(req: Request, res: Response) {
-    return enqueueGeneration(
-      req,
-      res,
-      { source: "course", queryType: "generate-quiz", label: "Quiz" },
-      (jobReq, jobRes) => GeminiAiV2Controller.runGenerateQuiz(jobReq, jobRes)
-    );
+    return GeminiAiV2Controller.runGenerateQuiz(req, res);
   }
 
   static async runSummarize(req: Request, res: Response) {
