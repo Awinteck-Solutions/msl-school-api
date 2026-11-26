@@ -344,10 +344,15 @@ export class PastQuestionV2Controller {
   }
 
   /**
-   * Questions in this paper that also appear (near-identically) in other sittings of the same
-   * exam paper. Query: minimum (0-100, default 46), perQuestion (1-20, default 8),
-   * limit (1-100, default 40), scope ("course" pairs across all sittings, or "paper" only pairs
-   * that involve this paper).
+   * Near-identical questions across the sittings of one exam paper. The defaults reproduce what
+   * the web notebook's Similar tab computes in the browser.
+   *
+   * Query (all optional):
+   * - minimum: 0-100, lowest score to keep (default 46)
+   * - perQuestion: 1-20, peers listed per question (default 8)
+   * - limit: 1-100, pairs returned in `links` (default 40)
+   * - scope: "course" = pairs across every sitting (default), "paper" = only pairs involving this paper
+   * - peersFor: "course" = peers for every question in the course (default), "paper" = only this paper's
    */
   static async similar(req: Request, res: Response) {
     try {
@@ -367,6 +372,7 @@ export class PastQuestionV2Controller {
       const perQuestion = clampInt(req.query.perQuestion, DEFAULT_PEERS_PER_QUESTION, 1, 20);
       const limit = clampInt(req.query.limit, DEFAULT_TOP_LINKS, 1, 100);
       const scope = req.query.scope === "paper" ? "paper" : "course";
+      const peersFor = req.query.peersFor === "paper" ? "paper" : "course";
 
       const sittings: any[] = (
         await findCoursePapers({
@@ -408,7 +414,10 @@ export class PastQuestionV2Controller {
           : allPairs
       ).slice(0, limit);
 
-      const focusIds = new Set(questions.filter((q) => q.paperId === id).map((q) => q._id));
+      const focusIds =
+        peersFor === "paper"
+          ? new Set(questions.filter((q) => q.paperId === id).map((q) => q._id))
+          : undefined;
       const peers = peersByQuestion(allPairs, perQuestion, focusIds);
 
       return res.status(200).json({
@@ -418,6 +427,7 @@ export class PastQuestionV2Controller {
           paperId: id,
           minimum,
           scope,
+          peersFor,
           sittingsCompared: sittings.length,
           questionsCompared: questions.length,
           links,
