@@ -628,6 +628,7 @@ type PastQuestionChatBody = {
   categoryId?: string;
   level?: string;
   paperCode?: string;
+  title?: string;
   history?: unknown;
 };
 
@@ -688,6 +689,7 @@ async function preparePastQuestionChat(
     categoryId,
     level,
     paperCode,
+    title,
     history,
   } = body;
 
@@ -723,7 +725,12 @@ async function preparePastQuestionChat(
     }
     paper = await PastQuestionPaper.findById(paperId).lean();
   } else if (!paperId && categoryId && level) {
-    const papers = await findCoursePapers({ categoryId, level, paperCode });
+    const papers = await findCoursePapers({
+      categoryId,
+      level,
+      paperCode,
+      title,
+    });
     paper = papers[0];
   } else if (paperId && mongoose.Types.ObjectId.isValid(paperId)) {
     paper = await PastQuestionPaper.findById(paperId).lean();

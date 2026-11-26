@@ -767,16 +767,18 @@ export const refreshCourseInsights = async (paper: {
   title?: string;
 }) => {
   const key = courseKey(paper);
-  const papers = await PastQuestionPaper.find({
-    categoryId: key.categoryId,
+  const papers = await findCoursePapers({
+    categoryId: String(key.categoryId?._id || key.categoryId),
     level: key.level,
-    $or: [
-      { paperCode: key.paperCode },
-      { paperCode: "", title: paper.title },
-    ],
-    processStatus: PastQuestionProcessStatus.SUCCESS,
-    status: PastQuestionStatus.ACTIVE,
-  }).sort({ year: 1, sitting: 1 });
+    paperCode: paper.paperCode || "",
+    title: paper.title || "",
+  });
+  // findCoursePapers sorts year desc; insights prefer chronological.
+  papers.sort(
+    (a: any, b: any) =>
+      Number(a.year || 0) - Number(b.year || 0) ||
+      String(a.sitting || "").localeCompare(String(b.sitting || ""))
+  );
 
   const paperIds = papers.map((row: any) => row._id);
   const items = await PastQuestionItem.find({
@@ -1818,20 +1820,56 @@ export const getPastQuestionContext = async (params: {
   return parts.join("\n\n");
 };
 
-export const findCoursePapers = (params: {
+export const findCoursePapers = async (params: {
   categoryId: string;
   level: string;
   paperCode?: string;
   title?: string;
 }) => {
   const code = String(params.paperCode || "").trim().toUpperCase();
+  const title =
+    normalizePaperTitle(params.title || "") || String(params.title || "").trim();
+  if (!code && !title) return [];
+
   const filter: Record<string, unknown> = {
     categoryId: new mongoose.Types.ObjectId(params.categoryId),
     level: String(params.level).trim(),
     status: PastQuestionStatus.ACTIVE,
     processStatus: PastQuestionProcessStatus.SUCCESS,
   };
-  if (code) filter.paperCode = code;
-  else if (params.title) filter.title = params.title;
-  return PastQuestionPaper.find(filter).sort({ year: -1, sitting: 1 });
+  // Include coded sittings plus empty-code sittings of the same subject.
+  // Always narrow by normalized title so Strategic Case Study never mixes with Taxation.
+  if (code) {
+    filter.$or = [
+      { paperCode: code },
+      { paperCode: "" },
+      { paperCode: null },
+      { paperCode: { $exists: false } },
+    ];
+  }
+
+  const papers = await PastQuestionPaper.find(filter).sort({
+    year: -1,
+    sitting: 1,
+  });
+  if (!title) {
+    // Code-only callers: keep matching code (ignore empty-code rows from other subjects).
+    return papers.filter(
+      (paper: any) =>
+        String(paper.paperCode || "").trim().toUpperCase() === code
+    );
+  }
+
+  const want = title.toLowerCase();
+  return papers.filter((paper: any) => {
+    const got = (
+      normalizePaperTitle(paper.title) || String(paper.title || "")
+    )
+      .trim()
+      .toLowerCase();
+    if (got !== want) return false;
+    const rowCode = String(paper.paperCode || "").trim().toUpperCase();
+    // Same title, and code matches or is blank (legacy uploads).
+    return !rowCode || !code || rowCode === code;
+  });
 };
