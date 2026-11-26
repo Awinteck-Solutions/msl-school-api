@@ -5712,7 +5712,8 @@
       "title": "Financial Management",
       "level": "Level 2",
       "aliases": [
-        "FINANCIAL MANAGEMENT"
+        "FINANCIAL MANAGEMENT",
+        "MANAGEMENT"
       ],
       "sections": [],
       "topics": [
@@ -14447,6 +14448,7 @@
       "AUDIT & ASSURANCE": "2.3",
       "AUDIT AND INTERNAL REVIEW": "2.3",
       "FINANCIAL MANAGEMENT": "2.4",
+      "MANAGEMENT": "2.4",
       "PUBLIC SECTOR ACCOUNTING AND FINANCE": "2.5",
       "PUBLIC SECTOR ACCOUNTING & FINANCE": "2.5",
       "PUBLIC SECTOR ACCOUNTING": "2.5",

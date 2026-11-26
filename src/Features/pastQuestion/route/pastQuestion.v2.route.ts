@@ -48,6 +48,10 @@ Router.get("/:id/insights", (req: Request, res: Response) => {
   PastQuestionV2Controller.paperInsights(req, res);
 });
 
+Router.get("/:id/similar", (req: Request, res: Response) => {
+  PastQuestionV2Controller.similar(req, res);
+});
+
 Router.get("/:id", (req: Request, res: Response) => {
   PastQuestionV2Controller.getPaper(req, res);
 });

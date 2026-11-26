@@ -33,6 +33,20 @@ import {
   normalizeInsightDocument,
   serializePaper,
 } from "./pastQuestion.service";
+import {
+  DEFAULT_PEERS_PER_QUESTION,
+  DEFAULT_SIMILAR_MINIMUM,
+  DEFAULT_TOP_LINKS,
+  SimilarQuestion,
+  buildSimilarPairs,
+  peersByQuestion,
+} from "./pastQuestionSimilar";
+
+const clampInt = (value: unknown, fallback: number, min: number, max: number) => {
+  const parsed = parseInt(String(value ?? ""), 10);
+  if (Number.isNaN(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+};
 
 const CHAT_SYSTEM_PROMPT = `
 You are a helpful AI assistant for ICAG and MSL past exam questions. Use the provided past-question text and MSL learning context when relevant. You may also use general subject knowledge so the answer is complete and exam-useful.
@@ -324,6 +338,96 @@ export class PastQuestionV2Controller {
       return res.status(500).json({
         status: false,
         message: "Failed to fetch insights",
+        error: error?.message || error,
+      });
+    }
+  }
+
+  /**
+   * Questions in this paper that also appear (near-identically) in other sittings of the same
+   * exam paper. Query: minimum (0-100, default 46), perQuestion (1-20, default 8),
+   * limit (1-100, default 40), scope ("course" pairs across all sittings, or "paper" only pairs
+   * that involve this paper).
+   */
+  static async similar(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id || "");
+      if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ status: false, message: "Invalid id" });
+      }
+      const paper: any = await PastQuestionPaper.findOne({
+        _id: id,
+        status: PastQuestionStatus.ACTIVE,
+      }).lean();
+      if (!paper) {
+        return res.status(404).json({ status: false, message: "Paper not found" });
+      }
+
+      const minimum = clampInt(req.query.minimum, DEFAULT_SIMILAR_MINIMUM, 0, 100);
+      const perQuestion = clampInt(req.query.perQuestion, DEFAULT_PEERS_PER_QUESTION, 1, 20);
+      const limit = clampInt(req.query.limit, DEFAULT_TOP_LINKS, 1, 100);
+      const scope = req.query.scope === "paper" ? "paper" : "course";
+
+      const sittings: any[] = (
+        await findCoursePapers({
+          categoryId: String(paper.categoryId?._id || paper.categoryId),
+          level: paper.level,
+          paperCode: paper.paperCode || "",
+          title: paper.title || "",
+        })
+      ).map((row: any) => (typeof row.toObject === "function" ? row.toObject() : row));
+      if (!sittings.some((row) => String(row._id) === id)) sittings.push(paper);
+
+      const meta = new Map<string, any>(sittings.map((row) => [String(row._id), row]));
+      const items: any[] = await PastQuestionItem.find({ paper: { $in: [...meta.keys()] } })
+        .sort({ order: 1 })
+        .select("paper number question questionHtml marks order")
+        .lean();
+
+      const questions: SimilarQuestion[] = items.map((item) => {
+        const source = meta.get(String(item.paper));
+        return {
+          _id: String(item._id),
+          paperId: String(item.paper),
+          number: item.number || "",
+          question: item.question || "",
+          questionHtml: item.questionHtml || "",
+          marks: item.marks ?? null,
+          year: source?.year ?? "",
+          sitting: source?.sitting || "",
+          title: source?.title || "",
+          level: source?.level || "",
+          paperCode: source?.paperCode || "",
+        };
+      });
+
+      const allPairs = buildSimilarPairs(questions, minimum);
+      const links = (
+        scope === "paper"
+          ? allPairs.filter((pair) => pair.left.paperId === id || pair.right.paperId === id)
+          : allPairs
+      ).slice(0, limit);
+
+      const focusIds = new Set(questions.filter((q) => q.paperId === id).map((q) => q._id));
+      const peers = peersByQuestion(allPairs, perQuestion, focusIds);
+
+      return res.status(200).json({
+        status: true,
+        message: "Similar past questions fetched",
+        response: {
+          paperId: id,
+          minimum,
+          scope,
+          sittingsCompared: sittings.length,
+          questionsCompared: questions.length,
+          links,
+          peers: Object.fromEntries(peers),
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: false,
+        message: "Failed to fetch similar questions",
         error: error?.message || error,
       });
     }
